@@ -1,0 +1,34 @@
+BEGIN_PROLOG
+
+CalorimetryAlg: {
+  CalAmpConstants: [ 5.88726e-4, 5.88726e-4, 1.18998e-3]
+  CalAreaConstants: [ 2.00906e-2, 2.00016e-2, 2.01293e-2]
+  CaloDoLifeTimeCorrection: true
+  CaloLifeTimeForm: 0
+  CaloUseModBox: true
+}
+
+analyseMichels:
+{
+  CalorimetryAlg:	@local::CalorimetryAlg
+  module_type:      	"AnalyseMichels"
+  PFParticleLabel:  	"pandora"
+  HitLabel:		"gaushit"
+  TrackLabel:       	"pandoraTrack"
+  ShowerLabel:		"pandoraShowerSBN"
+  CalorimetryLabel: 	"pandoraCalo"
+  MCTruthLabel: 	"largeant"
+  ClusterLabel: 	"pandora"
+  HitClusterLabel:	"pandora"
+  HitShowerLabel:	"pandoraShowerSBN"
+  HitTrackLabel:	"pandoraTrack"
+  HitSpacePointLabel:	"pandora"
+  TrackCaloLabel:	"pandoraCalo"
+  CaloSkimLabel:	"caloskimCalorimetry"
+  UseWPlaneOnly:	0			# 0 = Use all planes, 1 = use only collection plane
+  SliceLabel:		"pandora"
+  RecombinationFactor:	6.4e-1
+  UseTrack:		true
+  UseShower:		true
+}
+END_PROLOG
