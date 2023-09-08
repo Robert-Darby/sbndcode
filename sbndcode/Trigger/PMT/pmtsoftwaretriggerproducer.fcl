@@ -5,21 +5,28 @@ pmtSoftwareTriggerProducer:
   module_type: "pmtSoftwareTriggerProducer"
   is_persistable: true
   TriggerTimeOffset: 0.5    # seconds, defined by fragment producer
+  UseBeamWindow: false      # Ignore beam window and analyse all fragments
   BeamWindowLength: 1.8     # us, extended by 0.2us to account for delayed signals
   WvfmLength: 5120
   Verbose: true
-  SaveHists: false          # save 10 us waveform histograms
+  SaveHists: true          # save 10 us waveform histograms
 
   # turn on/off various metric calculations 
   CalculateBaseline:  true   # if true, will calculate baseline, if false, will use provided InputBaseline parameters below! 
   CountPMTs:          true   # if true, will count number of PMTS above threshold in the beam window
-  CalculatePEMetrics: true   # if true, will calculate prompt/preliminary PE 
-  FindPulses:         false  # if true, will use crude pulse finding algorithm 
+  CalculatePEMetrics: true  # if true, will calculate prompt/preliminary PE 
+  FindPulses:         true  # if true, will use crude pulse finding algorithm 
 
   # metric input parameters 
   InputBaseline: [8000.0, 2.0] # in ADC, used if CalculateBaseline is FALSE // first entry is baseline, second entry is baseline error 
   ADCThreshold:  7960          # in ADC, corresponds to ~5 PE in ideal response, used for CountPMTs (above threshold)  
   PEArea:        66.33         # conversion factor from ADCxns area to PE count **not tuned** 
+
+  UseSearchWindow: false	       # Find no. of PMTs above threshold in a window offset from the trigger
+  WindowThreshold: 7960	       # ADC Threshold of search window
+  ThresholdDuration: 0.01      # Min amount of time for a channel to continuosly be above the window threshold (us)
+  WindowSize: 8.               # Length of the search window (us)
+  WindowOffset: 0.2            # Start of window wrt trigger time
 }
 
 END_PROLOG

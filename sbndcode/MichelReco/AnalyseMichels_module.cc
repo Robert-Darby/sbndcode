@@ -37,6 +37,7 @@
 #include "canvas/Persistency/Common/FindOneP.h"
 #include "lardataobj/RecoBase/Cluster.h"
 #include "lardataobj/RecoBase/Hit.h"
+#include "lardataobj/RecoBase/OpHit.h"
 #include "lardataobj/RecoBase/Track.h"
 #include "lardataobj/RecoBase/Shower.h"
 #include "sbndcode/RecoUtils/RecoUtils.h"
@@ -106,6 +107,7 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   void FindRecoMichelShower(const art::Event& e);
   void FindRecoMichelTrack(const art::Event& e);
   void FindRecoMichel(const art::Event& e);
+  void FindOpticalData(const art::Event& e);
 
   // Create out output tree
   TTree* fTree;
@@ -134,6 +136,7 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   // Event Variables
   int fEventID;
   int fNPFParticles;
+  int fEventNOpHits;
   std::vector<int> fPFParticlePDG;
   int fEventNHits;
   int fEventNClusterHits;		// No hits in event associated with a cluster
@@ -169,6 +172,7 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
 
   // MC Michel
   int fMCMichelID;
+  double fMCMichelTime;
   float fMCMichelEnergy;
   float fMCMichelTheta;
   float fMCMichelPhi;
@@ -288,6 +292,7 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
 
   // MC Muon
   int fMCMuonPDG;
+  double fMCMuonTime;
   int fMCMuonG4ID;
   int fNDeltas;
   int fNPoints;
@@ -362,6 +367,7 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   const std::string fHitTrackLabel;
   const std::string fHitSpacePointLabel;
   const std::string fTrackCaloLabel;
+  const std::string fOpHitLabel;
   const int sUseWPlaneOnly;
   const std::string fSliceLabel;
   const float fRecombinationFactor;
@@ -390,6 +396,7 @@ sbnd::AnalyseMichels::AnalyseMichels(fhicl::ParameterSet const& p)
   , fHitTrackLabel(p.get<std::string>("HitTrackLabel"))
   , fHitSpacePointLabel(p.get<std::string>("HitSpacePointLabel"))
   , fTrackCaloLabel(p.get<std::string>("TrackCaloLabel"))
+  , fOpHitLabel(p.get<std::string>("OpHitLabel"))
   , sUseWPlaneOnly(p.get<int>("UseWPlaneOnly"))
   , fSliceLabel(p.get<std::string>("SliceLabel"))
   , fRecombinationFactor(p.get<float>("RecombinationFactor"))
@@ -484,6 +491,7 @@ void sbnd::AnalyseMichels::analyze(art::Event const& e)
     FindRecoMichel(e);
     if(fIsShower) FindRecoMichelShower(e);
     else if(fIsTrack) FindRecoMichelTrack(e);
+    FindOpticalData(e);
     fTree->Fill();
   }
 }
@@ -500,6 +508,7 @@ void sbnd::AnalyseMichels::beginJob()
   // Event
   fTree->Branch("event.ID", 			&fEventID);
   fTree->Branch("event.NPFParticles", 		&fNPFParticles);
+  fTree->Branch("event.NOpHits",		&fEventNOpHits);
   fTree->Branch("event.PFParticlePDG", 		&fPFParticlePDG);
   fTree->Branch("event.NHits", 			&fEventNHits);
   fTree->Branch("event.NClusterHits",		&fEventNClusterHits);
@@ -536,6 +545,7 @@ void sbnd::AnalyseMichels::beginJob()
 
   // MC Michel
   fTree->Branch("mcMichel.ID", 			&fMCMichelID);
+  fTree->Branch("mcMichel.Time",		&fMCMichelTime);
   fTree->Branch("mcMichel.Energy", 		&fMCMichelEnergy);
   fTree->Branch("mcMichel.Theta", 		&fMCMichelTheta);
   fTree->Branch("mcMichel.Phi", 		&fMCMichelPhi);
@@ -655,6 +665,7 @@ void sbnd::AnalyseMichels::beginJob()
   // MC Muon
   fTree->Branch("mcMuon.PDG",			&fMCMuonPDG);
   fTree->Branch("mcMuon.G4ID",			&fMCMuonG4ID);
+  fTree->Branch("mcMuon.Time",			&fMCMuonTime);
   fTree->Branch("mcMuon.NDeltas", 		&fNDeltas);
   fTree->Branch("mcMuon.NPoints", 		&fNPoints);
   fTree->Branch("mcMuon.Energy", 		&fMCMuonEnergy);
@@ -739,8 +750,10 @@ void sbnd::AnalyseMichels::ResetVars()
   // Reset all of our variables to 0 or empty vectors
   // This ensures things are not kept from the previous event
   fNPFParticles = 0;
+  fEventNOpHits = -9999;
   fNDeltas = 0;
   fMCMichelID = 0;
+  fMCMichelTime = -9999.;
   fNTotalMichelHits= 0;
   fNHitsInRecoMichel = 0;
   fEventNHits = 0;
@@ -769,6 +782,7 @@ void sbnd::AnalyseMichels::ResetVars()
   fRecoMichelStartY = 0;
   fRecoMichelStartZ = 0;
   fMCMuonPDG = -9999;
+  fMCMuonTime = -9999.;
   fMCMuonG4ID = -9999;
   fMCMuonEndX = 0;
   fMCMuonEndY = 0;
@@ -952,6 +966,12 @@ void sbnd::AnalyseMichels::FillMC(const art::Ptr<simb::MCParticle>& mcp,
   fMCMuonPDG = mcp->PdgCode();
   fMCMuonG4ID = mcp->TrackId();
   fNPoints = mcp->NumberTrajectoryPoints();
+  for(int pos=0;pos<fNPoints;pos++) {
+    if((abs(mcp->Position(pos).X()) < 200.) &&
+       (abs(mcp->Position(pos).Y()) < 200.) &&
+       (mcp->Position(pos).Z() > 0.) &&
+       (mcp->Position(pos).Z() < 500.)) {fMCMuonTime = mcp->T(pos); break;}
+  }
   unsigned int i =  fNPoints/2;
   unsigned int j = fNPoints-1;
   unsigned int firstquart = fNPoints/4;
@@ -990,6 +1010,7 @@ void sbnd::AnalyseMichels::FillMC(const art::Ptr<simb::MCParticle>& mcp,
   
   for(auto& mcp2 : mctruthVect) {
     if(abs(mcp2->PdgCode()) != 11 || mcp2->Mother() != fMCMuonG4ID) continue;
+    fMCMichelTime = mcp2->T();
     fMCMichelNPoints = mcp2->NumberTrajectoryPoints();  
     unsigned int i  = mcp2->NumberTrajectoryPoints() -1;
     unsigned int j = mcp2->NumberTrajectoryPoints() / 2;
@@ -1169,6 +1190,18 @@ void sbnd::AnalyseMichels::FindRecoMichel(
       fRecoMuonID = pfp->Self();
     }
   }
+}
+
+void sbnd::AnalyseMichels::FindOpticalData(
+  const art::Event& e)
+{
+  art::Handle<std::vector<recob::OpHit>> ophitHandle;
+  std::vector<art::Ptr<recob::OpHit>> ophitVec;
+  if (e.getByLabel(fOpHitLabel, ophitHandle))
+    art::fill_ptr_vector(ophitVec, ophitHandle);
+  
+  std::cout << "NOpHits: " << ophitVec.size() << std::endl;
+  fEventNOpHits = ophitVec.size();
 }
 
 DEFINE_ART_MODULE(sbnd::AnalyseMichels)

@@ -72,6 +72,7 @@ private:
   // fhicl parameters
   // art::Persistable is_persistable_;
   double fTriggerTimeOffset;    // offset of trigger time, default 0.5 sec
+  bool fUseBeamWindow;
   double fBeamWindowLength; // beam window length after trigger time, default 1.6us
   uint32_t fWvfmLength;
   bool fVerbose;
@@ -86,8 +87,14 @@ private:
   int fADCThreshold;
   double fPEArea; // conversion factor from ADCxns area to PE count 
 
+  bool fUseSearchWindow;
+  int fWindowThreshold;
+  float fThresholdDuration;
+  float fWindowSize;
+  float fWindowOffset;
   // histogram info  
-  std::stringstream histname; //raw waveform hist name
+//  std::stringstream histname; //raw waveform hist name
+  std::stringstream ev_histname;
   art::ServiceHandle<art::TFileService> tfs;
 
   // event information
@@ -124,6 +131,8 @@ private:
   int    _npmt;
   double _promptPE, _prelimPE;
 
+  int _nabovewindow;
+
   TTree* _pulse_tree;
   int _npulses; 
   // std::vector<int> _ch_npulses; // number of pulses per channel
@@ -141,6 +150,7 @@ sbnd::trigger::pmtSoftwareTriggerProducer::pmtSoftwareTriggerProducer(fhicl::Par
   : EDProducer{p},
   // is_persistable_(p.get<bool>("is_persistable", true) ? art::Persistable::Yes : art::Persistable::No),
   fTriggerTimeOffset(p.get<double>("TriggerTimeOffset", 0.5)),
+  fUseBeamWindow(p.get<bool>("UseBeamWindow", false)),
   fBeamWindowLength(p.get<double>("BeamWindowLength", 1.6)), 
   fWvfmLength(p.get<uint32_t>("WvfmLength", 5120)),
   fVerbose(p.get<bool>("Verbose", false)),
@@ -151,7 +161,12 @@ sbnd::trigger::pmtSoftwareTriggerProducer::pmtSoftwareTriggerProducer(fhicl::Par
   fFindPulses(p.get<bool>("FindPulses", false)),
   fInputBaseline(p.get<std::vector<double>>("InputBaseline")),
   fADCThreshold(p.get<double>("ADCThreshold", 7960)),
-  fPEArea(p.get<double>("PEArea", 66.33))
+  fPEArea(p.get<double>("PEArea", 66.33)),
+  fUseSearchWindow(p.get<bool>("UseSearchWindow")),
+  fWindowThreshold(p.get<int>("WindowThreshold")),
+  fThresholdDuration(p.get<float>("ThresholdDuration")),
+  fWindowSize(p.get<float>("WindowSize", 0.)),
+  fWindowOffset(p.get<float>("WindowOffset"))
   // More initializers here.
 {
   // Call appropriate produces<>() functions here.
@@ -177,6 +192,7 @@ sbnd::trigger::pmtSoftwareTriggerProducer::pmtSoftwareTriggerProducer(fhicl::Par
   _tree->Branch("npmt",      &_npmt,      "npmt/I");
   _tree->Branch("promptPE",  &_promptPE,  "promptPE/D");
   _tree->Branch("prelimPE",  &_prelimPE,  "prelimPE/D");
+  _tree->Branch("nabovewindow", &_nabovewindow, "nabovewindow/I");
   _pulse_tree = fs->make<TTree>("pulse_tree","");
   _pulse_tree->Branch("run",       &_run,       "run/I");
   _pulse_tree->Branch("sub",       &_sub,       "sub/I");
@@ -275,6 +291,12 @@ void sbnd::trigger::pmtSoftwareTriggerProducer::produce(art::Event& e)
     std::cout << "beamEndBin: "   << beamEndBin << std::endl;
     // wvfm loop to calculate metrics 
 
+    int nAboveWindow = 0;
+    // find the waveform bins that correspond to the start and end of the search window within the 10 us waveform
+    // !! if the window extends past the waveform end, the end of the window is the waveform end
+    int windowStartBin = int((1000 + fWindowOffset*1000)/2); // units of bins
+    int windowEndBin   = (fWindowOffset+fWindowSize > 1e4) ? 5000 : (windowStartBin + (fWindowSize)*500);
+
     _npulses = 0;
     _pulse_ch.clear(); //_pulse_npulses.clear();
     _pulse_t_start.clear(); _pulse_t_end.clear(); _pulse_t_peak.clear();
@@ -303,6 +325,20 @@ void sbnd::trigger::pmtSoftwareTriggerProducer::produce(art::Event& e)
         }
       }
       else nAboveThreshold=-9999;
+
+      if (fCalculateBaseline) estimateBaseline(i_ch);
+      else { pmtInfo.baseline=fInputBaseline.at(0); pmtInfo.baselineSigma = fInputBaseline.at(1); }
+
+      // count number of PMTs above threshold within the beam window
+      if (fUseSearchWindow) {
+        int nbins_above_threshold = 0;
+        for (int bin = windowStartBin; bin < windowEndBin; ++bin){
+          auto adc = wvfm[bin];
+          if(adc < fADCThreshold){ nbins_above_threshold++;
+            if(nbins_above_threshold > fThresholdDuration*500) {nAboveWindow++; break;}
+          }
+        }
+      }
 
       // quick estimate prompt and preliminary light, assuming sampling rate of 500 MHz (2 ns per bin)
       if (fCalculatePEMetrics){
@@ -363,30 +399,44 @@ void sbnd::trigger::pmtSoftwareTriggerProducer::produce(art::Event& e)
     _promptPE = promptPE; 
     _prelimPE = prelimPE;
 
+    _nabovewindow = nAboveWindow;
+
     if (fVerbose && fCountPMTs) std::cout << "nPMTs Above Threshold: " << trig_metrics.nAboveThreshold << std::endl;
     if (fVerbose && fCalculatePEMetrics) std::cout << "prompt pe: " << trig_metrics.promptPE << std::endl;
     if (fVerbose && fCalculatePEMetrics) std::cout << "prelim pe: " << trig_metrics.prelimPE << std::endl;
 
     // start histo 
     if (fSaveHists == true){
-      int hist_id = -1; 
+      
+//      int hist_id = -1; 
+
+      ev_histname.str(std::string());
+      ev_histname << "run_" << fRun
+                << "subrun_" <<fSubrun
+                << "event_" << fEvent;
+      double ev_StartTime = (triggerTimeStamp-1000)*1e-3; // us
+      double ev_EndTime   = ev_StartTime + (fWvfmLength*2)*1e-3;
+      int wvfmsize = fWvfmsVec[0].size();
+      TH1D *event_hist = tfs->make< TH1D >(ev_histname.str().c_str(), "Raw Waveform", wvfmsize, ev_StartTime, ev_EndTime);
+
       for (size_t i_wvfm = 0; i_wvfm < fWvfmsVec.size(); ++i_wvfm){
         std::vector<uint16_t> wvfm = fWvfmsVec[i_wvfm];
-        hist_id++;
+//        hist_id++;
         //if (fEvent<4){
-            histname.str(std::string());
-            histname << "run_" << fRun  
-                    << "subrun_" <<fSubrun
-                    << "event_" << fEvent
-                    << "_pmtnum_" << channelList.at(i_wvfm);
-            // assuming that we save ~1 us before the triggerTimeStamp  
-            double StartTime = (triggerTimeStamp-1000)*1e-3; // us
-            double EndTime   = StartTime + (fWvfmLength*2)*1e-3;
+//            histname.str(std::string());
+//            histname << "run_" << fRun  
+//                    << "subrun_" <<fSubrun
+//                    << "event_" << fEvent
+//                    << "_pmtnum_" << channelList.at(i_wvfm);
+//            // assuming that we save ~1 us before the triggerTimeStamp  
+//            double StartTime = (triggerTimeStamp-1000)*1e-3; // us
+//            double EndTime   = StartTime + (fWvfmLength*2)*1e-3;
 
-            TH1D *wvfmHist = tfs->make< TH1D >(histname.str().c_str(), "Raw Waveform", wvfm.size(), StartTime, EndTime);
-            wvfmHist->GetXaxis()->SetTitle("t (#mus)");
+//            TH1D *wvfmHist = tfs->make< TH1D >(histname.str().c_str(), "Raw Waveform", wvfm.size(), StartTime, EndTime);
+//            wvfmHist->GetXaxis()->SetTitle("t (#mus)");
             for(unsigned int i = 0; i < wvfm.size(); i++) {
-              wvfmHist->SetBinContent(i + 1, (double)wvfm[i]);
+//              wvfmHist->SetBinContent(i + 1, (double)wvfm[i]);
+              event_hist->AddBinContent(i + 1, (double)wvfm[i]);
             }
         //} 
       } // end histo
@@ -431,7 +481,8 @@ void sbnd::trigger::pmtSoftwareTriggerProducer::checkCAEN1730FragmentTimeStamp(c
   value_ptr = data_begin + ch_offset + tr_offset; // pointer arithmetic 
   value = *(value_ptr);
   
-  if (value == 1 && timestamp >= beamWindowStart && timestamp <= beamWindowEnd) {
+  if ((value == 1 && timestamp >= beamWindowStart && timestamp <= beamWindowEnd) ||
+      !fUseBeamWindow) {
     foundBeamTrigger = true;
     fTriggerTime = timestamp;
   }

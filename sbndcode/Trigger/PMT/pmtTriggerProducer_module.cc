@@ -133,7 +133,7 @@ private:
    std::vector<std::vector<char>> unpaired_wvfs;
 
    // List parameters for the fcl file
-   std::vector<double> fThreshold = {7960.0,7976.0}; //individual pmt threshold in ADC (set in fcl, passes if ADC is LESS THAN threshold), [coated, uncoated]
+   std::vector<double> fThreshold = {7995.0,7995.0}; //individual pmt threshold in ADC (set in fcl, passes if ADC is LESS THAN threshold), [coated, uncoated]
    bool fIndividualThresholds;
    int fOVTHRWidth;//over-threshold width, page 40 of manual (set in fcl)
    std::vector<int> fPair1 = {6,8,10,12,14,16,36,38,40,84,86,88,90,92,94,114,116,118,138,140,142,144,146,148,162,164,166,168,170,172,192,194,196,216,218,220,222,224,226,240,242,244,246,248,250,270,272,274,294,296}; //channel numbers for first set of paired pmts (set in fcl)
