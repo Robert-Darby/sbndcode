@@ -1,0 +1,22 @@
+# CORSIKA cosmics only simulation selecting
+# only muons that cross the east-west CRTs:
+# cathode crossing
+
+#include "prodcorsika_cosmics_cmc_filter.fcl"
+
+physics.filters.filter.UseTopHighCRTs:        true
+physics.filters.filter.UseTopLowCRTs:         true
+physics.filters.filter.UseBottomCRTs:         false
+physics.filters.filter.UseFrontCRTs:          false
+physics.filters.filter.UseBackCRTs:           false
+physics.filters.filter.UseLeftCRTs:           false
+physics.filters.filter.UseRightCRTs:          false
+physics.filters.filter.PDGs:                  [ 13, -13 ]
+# units are GeV/c, needs at least 0.8 GeV/c to cross active volume
+physics.filters.filter.MinMomentums:          [ -999., -999. ]
+physics.filters.filter.MaxMomentums:          [ 0.8, 0.8 ]
+physics.filters.filter.CRTDimensionScaling:   1.2
+physics.filters.filter.UseReadoutWindow:      true
+physics.filters.filter.UseTightReadoutWindow: true
+
+outputs.out1.fileName: "prodcosmics_corsika_eastwestcrt_sbnd_%p-%tc.root"

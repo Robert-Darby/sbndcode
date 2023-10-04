@@ -28,6 +28,15 @@
 #include "fhiclcpp/ParameterSet.h"
 #include "messagefacility/MessageLogger/MessageLogger.h"
 
+#include "art/Framework/Core/EDProducer.h"
+#include "art/Framework/Core/ModuleMacros.h"
+#include "art/Framework/Principal/Event.h"
+#include "art/Framework/Principal/Handle.h"
+#include "art/Framework/Principal/Run.h"
+#include "art/Framework/Principal/SubRun.h"
+#include "art/Persistency/Common/PtrMaker.h"
+#include "art/Utilities/make_tool.h"
+
 #include "art_root_io/TFileService.h"
 #include "nusimdata/SimulationBase/MCParticle.h"
 #include "nusimdata/SimulationBase/MCTruth.h"
@@ -37,6 +46,7 @@
 #include "canvas/Persistency/Common/FindOneP.h"
 #include "lardataobj/RecoBase/Cluster.h"
 #include "lardataobj/RecoBase/Hit.h"
+#include "sbncode/OpDet/PDMapAlg.h"
 #include "lardataobj/RecoBase/OpHit.h"
 #include "lardataobj/RecoBase/Track.h"
 #include "lardataobj/RecoBase/Shower.h"
@@ -103,7 +113,7 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
 
   void ResetVars();
 
-  void FillMC(const art::Ptr<simb::MCParticle>& mcp, std::vector<art::Ptr<simb::MCParticle>>& mctruthVect);
+  void FillMC(const art::Event& e, const art::Ptr<simb::MCParticle>& mcp, std::vector<art::Ptr<simb::MCParticle>>& mctruthVect);
   void FindRecoMichelShower(const art::Event& e);
   void FindRecoMichelTrack(const art::Event& e);
   void FindRecoMichel(const art::Event& e);
@@ -170,6 +180,15 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   int fNSlices;
   int fNMichelNonClust;	// No. of non-clustered Michel hits in event
 
+  double fMichelOpHits;
+  std::vector<double> fOpHitTimes;
+  std::vector<double> fOpHitWidths;
+  std::vector<double> fOpHitPEs;
+  std::vector<double> fWVFChannel;
+  std::vector<double> fWVFBaseline;
+  std::vector<double> fWVFSigma;
+  std::vector<std::string> fWVFDet;
+
   // MC Michel
   int fMCMichelID;
   double fMCMichelTime;
@@ -186,6 +205,7 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   float fMCMichelRelAngle;
   int fMCMichelNPoints;
   float fMCMichelEnergyFrac;		// Fraction of end MC muon energy taken by michel
+  float fMCMichelTotalADC;
 
   float fPurity;
   float fCompleteness;
@@ -207,6 +227,8 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   float fRecoMichelRelPhi;
   float fRecoMichelRelAngle;
   TVector3 *fRecoMichelVect;
+  float fRecoMichel2DVertexDist;
+  float fRecoMichel3DVertexDist;
   float fRecoMichelStartX;
   float fRecoMichelStartY;
   float fRecoMichelStartZ;
@@ -290,6 +312,7 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   std::vector<int> fRecoMichelNHitsPlane;
   TVector3 *fRecoMichelStartVect;
 
+
   // MC Muon
   int fMCMuonPDG;
   double fMCMuonTime;
@@ -370,12 +393,17 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   const std::string fOpHitLabel;
   const int sUseWPlaneOnly;
   const std::string fSliceLabel;
+  const std::string fWVFLabel;
+  const std::unique_ptr<opdet::PDMapAlg> fPDMapAlgPtr;
   const float fRecombinationFactor;
   const bool fUseTrack;
   const bool fUseShower;
+  const double fTimeStart;
+  const double fTimeEnd;
+  const bool fMakeHists;
 
   // Declare member data here.
-  void FillMC(art::Ptr<simb::MCParticle>& mcp, std::vector<art::Ptr<simb::MCParticle>>& mctruthVect);
+  void FillMC(const art::Event& e, art::Ptr<simb::MCParticle>& mcp, std::vector<art::Ptr<simb::MCParticle>>& mctruthVect);
     // BackTrackerService
 //    art::ServiceHandle<cheat::BackTrackerService> bt_serv;
 };
@@ -399,9 +427,14 @@ sbnd::AnalyseMichels::AnalyseMichels(fhicl::ParameterSet const& p)
   , fOpHitLabel(p.get<std::string>("OpHitLabel"))
   , sUseWPlaneOnly(p.get<int>("UseWPlaneOnly"))
   , fSliceLabel(p.get<std::string>("SliceLabel"))
+  , fWVFLabel(p.get<std::string>("WVFLabel"))
+  , fPDMapAlgPtr(art::make_tool<opdet::PDMapAlg>(p.get<fhicl::ParameterSet>("PDMapAlg")))
   , fRecombinationFactor(p.get<float>("RecombinationFactor"))
   , fUseTrack(p.get<bool>("UseTrack"))
   , fUseShower(p.get<bool>("UseShower"))
+  , fTimeStart(p.get<double>("TimeStart", 0.))
+  , fTimeEnd(p.get<double>("TimeEnd", 10.))
+  , fMakeHists(p.get<bool>("MakeHists", true))
 {
   // Call appropriate consumes<>() for any products to be retrieved by this module.
 }
@@ -486,7 +519,7 @@ void sbnd::AnalyseMichels::analyze(art::Event const& e)
   for(auto const &mcp: mctruthVect) {
     if(abs(mcp->PdgCode()) != 13 || abs(mcp->EndX()) > 200. || abs(mcp->EndY()) > 200. || mcp->EndZ() < 0. || mcp->EndZ() > 500.) continue;
     ResetVars();
-    FillMC(mcp, mctruthVect);
+    FillMC(e, mcp, mctruthVect);
     if(fMCMichelID == 0) continue;
     FindRecoMichel(e);
     if(fIsShower) FindRecoMichelShower(e);
@@ -542,6 +575,14 @@ void sbnd::AnalyseMichels::beginJob()
   fTree->Branch("event.SADCSigma",		&fSADCSigma);
   fTree->Branch("event.NSlices",		&fNSlices);
   fTree->Branch("event.NNonclustMichelHits",	&fNMichelNonClust);
+  fTree->Branch("event.OpHitTimes",		&fOpHitTimes);
+  fTree->Branch("event.OpHitWidths",		&fOpHitWidths);
+  fTree->Branch("event.OpHitPEs",		&fOpHitPEs);
+  fTree->Branch("event.MichelPEs",		&fMichelOpHits);
+  fTree->Branch("event.WVFChannel",		&fWVFChannel);
+  fTree->Branch("event.WVFBaseline",            &fWVFBaseline);
+  fTree->Branch("event.WVFSigma",               &fWVFSigma);
+  fTree->Branch("event.WVFDet",             	&fWVFDet);
 
   // MC Michel
   fTree->Branch("mcMichel.ID", 			&fMCMichelID);
@@ -559,6 +600,7 @@ void sbnd::AnalyseMichels::beginJob()
   fTree->Branch("mcMichel.RelAngle",		&fMCMichelRelAngle);
   fTree->Branch("mcMichel.NPoints",		&fMCMichelNPoints);
   fTree->Branch("mcMichel.EnergyFrac",		&fMCMichelEnergyFrac);
+  fTree->Branch("mcMichel.TotalADC",		&fMCMichelTotalADC);
 
   // Reco Michel
   fTree->Branch("recoMichel.NHits", 		&fNHitsInRecoMichel);
@@ -579,6 +621,8 @@ void sbnd::AnalyseMichels::beginJob()
   fTree->Branch("recoMichel.RelPhi", 		&fRecoMichelRelPhi);
   fTree->Branch("recoMichel.RelAngle",		&fRecoMichelRelAngle);
   fTree->Branch("recoMichel.Vect", 		&fRecoMichelVect);
+  fTree->Branch("recoMichel.2DVertexDist",	&fRecoMichel2DVertexDist);
+  fTree->Branch("recoMichel.3DVertexDist",      &fRecoMichel3DVertexDist);
   fTree->Branch("recoMichel.StartX",		&fRecoMichelStartX);
   fTree->Branch("recoMichel.StartY",		&fRecoMichelStartY);
   fTree->Branch("recoMichel.StartZ",		&fRecoMichelStartZ);
@@ -764,6 +808,14 @@ void sbnd::AnalyseMichels::ResetVars()
   fNPoints = 0;
   fNShowers = 0;
   fNTracks = 0;
+  fOpHitTimes.clear();
+  fOpHitWidths.clear();
+  fOpHitPEs.clear();
+  fMichelOpHits = 0.;
+  fWVFChannel.clear();
+  fWVFBaseline.clear();
+  fWVFSigma.clear();
+  fWVFDet.clear();
   fRecoMichel = false;
   fIsTrack = false;
   fIsShower = false;
@@ -778,6 +830,9 @@ void sbnd::AnalyseMichels::ResetVars()
   fMCMichelStartX = 0;
   fMCMichelStartY = 0;
   fMCMichelStartZ = 0;
+  fMCMichelTotalADC = 0.;
+  fRecoMichel2DVertexDist = -9999.;
+  fRecoMichel3DVertexDist = -9999.;
   fRecoMichelStartX = 0;
   fRecoMichelStartY = 0;
   fRecoMichelStartZ = 0;
@@ -960,8 +1015,10 @@ void sbnd::AnalyseMichels::ResetVars()
 }
 
 
-void sbnd::AnalyseMichels::FillMC(const art::Ptr<simb::MCParticle>& mcp,
-                                  std::vector<art::Ptr<simb::MCParticle>>& mctruthVect)
+void sbnd::AnalyseMichels::FillMC(
+  const art::Event& e,
+  const art::Ptr<simb::MCParticle>& mcp,
+  std::vector<art::Ptr<simb::MCParticle>>& mctruthVect)
 {
   fMCMuonPDG = mcp->PdgCode();
   fMCMuonG4ID = mcp->TrackId();
@@ -970,7 +1027,13 @@ void sbnd::AnalyseMichels::FillMC(const art::Ptr<simb::MCParticle>& mcp,
     if((abs(mcp->Position(pos).X()) < 200.) &&
        (abs(mcp->Position(pos).Y()) < 200.) &&
        (mcp->Position(pos).Z() > 0.) &&
-       (mcp->Position(pos).Z() < 500.)) {fMCMuonTime = mcp->T(pos); break;}
+       (mcp->Position(pos).Z() < 500.)) {
+      fMCMuonTime = mcp->T(pos); 
+      fMCMuonStartX = mcp->Position(pos).X();
+      fMCMuonStartY = mcp->Position(pos).Y();
+      fMCMuonStartZ = mcp->Position(pos).Z();
+      break;
+    }
   }
   unsigned int i =  fNPoints/2;
   unsigned int j = fNPoints-1;
@@ -991,9 +1054,6 @@ void sbnd::AnalyseMichels::FillMC(const art::Ptr<simb::MCParticle>& mcp,
   fMCMuonEndY = mcp->EndY();
   fMCMuonEndZ = mcp->EndZ();
   TVector3 fMCMuonStartVect = mcp->Position(0).Vect();
-  fMCMuonStartX = fMCMuonStartVect.X();
-  fMCMuonStartY = fMCMuonStartVect.Y();
-  fMCMuonStartZ = fMCMuonStartVect.Z();;
   rotateVector(fMCMuonVect);
   fMCMuonTheta = (fMCMuonVect->Theta()) * 180 / M_PI -90; 		// Minus sign is there as muons are coming down;
   rotateVector(fMCMuonVect);
@@ -1038,6 +1098,17 @@ void sbnd::AnalyseMichels::FillMC(const art::Ptr<simb::MCParticle>& mcp,
     fMCMichelRelPhiHist->Fill(fMCMichelRelPhi);
     fMCMichelEnergyFrac = fMCMichelEnergy / fMCMuonEndEnergy;
   }
+  art::Handle<std::vector<recob::Hit>> hitHandle;
+  std::vector<art::Ptr<recob::Hit>> hitVec;
+  if (e.getByLabel(fHitLabel, hitHandle))
+    art::fill_ptr_vector(hitVec, hitHandle);
+
+  auto const clockData = art::ServiceHandle<detinfo::DetectorClocksService const>()->DataFor(e);
+  for(auto& hit : hitVec) {
+    int hit_id = RecoUtils::TrueParticleID(clockData, hit);
+    if(hit_id == fMCMichelID &&
+       hit->View()==2) fMCMichelTotalADC += hit->SummedADC();
+  }
 }
 
 void sbnd::AnalyseMichels::FindRecoMichelShower(
@@ -1062,6 +1133,10 @@ void sbnd::AnalyseMichels::FindRecoMichelShower(
     fRecoMichelStartY = shwstart.Y();
     fRecoMichelStartZ = shwstart.Z();
     fRecoMichelLength = shw->Length();
+    fRecoMichel2DVertexDist = sqrt((fRecoMichelStartY - fMCMichelStartY)*(fRecoMichelStartY - fMCMichelStartY) +
+                                   (fRecoMichelStartZ - fMCMichelStartZ)*(fRecoMichelStartZ - fMCMichelStartZ));
+    fRecoMichel3DVertexDist = sqrt((fRecoMichel2DVertexDist* fRecoMichel2DVertexDist) +
+                                   (fRecoMichelStartX - fMCMichelStartX)*(fRecoMichelStartX - fMCMichelStartX));
     fShowerBestPlane = shw->best_plane();
     std::vector<float> recomichelstartvect = {1.0, 1.0, 1.0};
 //    recomichelstartvect[0] = shw->Direction().X();
@@ -1104,6 +1179,10 @@ void sbnd::AnalyseMichels::FindRecoMichelTrack(
     fRecoMichelStartX = trk->Start().X();
     fRecoMichelStartY = trk->Start().Y();
     fRecoMichelStartZ = trk->Start().Z();      
+    fRecoMichel2DVertexDist = sqrt((fRecoMichelStartY - fMCMichelStartY)*(fRecoMichelStartY - fMCMichelStartY) +
+                                   (fRecoMichelStartZ - fMCMichelStartZ)*(fRecoMichelStartZ - fMCMichelStartZ));
+    fRecoMichel3DVertexDist = sqrt((fRecoMichel2DVertexDist* fRecoMichel2DVertexDist) +
+                                   (fRecoMichelStartX - fMCMichelStartX)*(fRecoMichelStartX - fMCMichelStartX));
   }
 }
 
@@ -1199,9 +1278,41 @@ void sbnd::AnalyseMichels::FindOpticalData(
   std::vector<art::Ptr<recob::OpHit>> ophitVec;
   if (e.getByLabel(fOpHitLabel, ophitHandle))
     art::fill_ptr_vector(ophitVec, ophitHandle);
-  
+
   std::cout << "NOpHits: " << ophitVec.size() << std::endl;
   fEventNOpHits = ophitVec.size();
-}
 
+  std::vector<recob::OpHit> ophits;
+  for(unsigned i=0; i<ophitVec.size();i++) {
+    auto& oph = *(ophitVec)[i];
+    if(oph.StartTime() > fTimeEnd ||
+       oph.StartTime() < fTimeStart) continue;
+    ophits.emplace_back(oph);
+    fOpHitTimes.push_back(oph.StartTime());
+    fOpHitWidths.push_back(oph.Width());
+    fOpHitPEs.push_back(oph.PE());
+    if((oph.StartTime()*1000. > fMCMichelTime) && (oph.StartTime()*1000 < fMCMichelTime + 200)) fMichelOpHits += oph.PE();
+  }
+  std::sort(ophits.begin(), ophits.end(),
+    [this] (const recob::OpHit oph1, recob::OpHit oph2)
+    { return oph1.StartTime() < oph2.StartTime(); });
+
+  double start_time = ophits[0].StartTime();
+  double end_time = ophits[ophits.size()-1].StartTime();
+  std::cout << "StartTime: " << start_time << std::endl;
+  std::cout << "EndTime: " << end_time << std::endl;
+  auto clockData = art::ServiceHandle<detinfo::DetectorClocksService const>()->DataForJob();
+  double tickPeriod = clockData.OpticalClock().TickPeriod();
+  unsigned bins = unsigned(1./tickPeriod * (fTimeEnd - fTimeStart));
+
+  if(fMakeHists) {
+    std::stringstream histname;
+    histname.str(std::string());
+    histname << "ophits_hist_" << fEventID;
+  
+    art::ServiceHandle<art::TFileService> tfs;
+    TH1D* ophits_hist = tfs->make<TH1D>(histname.str().c_str(), "ophit time profile", bins, start_time, end_time);
+    for(auto& oph : ophits) ophits_hist->Fill(oph.StartTime(), oph.PE());
+  }
+}
 DEFINE_ART_MODULE(sbnd::AnalyseMichels)

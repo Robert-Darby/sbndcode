@@ -1,0 +1,14 @@
+BEGIN_PROLOG
+
+analyseWaveforms:
+{
+  module_type:      	"AnalyseWaveforms"
+  MCTruthLabel: 	"largeant"
+  WVFLabel:		"opdaq"
+  PDMapAlg: {
+    tool_type: sbndPDMapAlg
+  }
+  TimeStart:		-0.2
+  TimeEnd:		5.
+}
+END_PROLOG

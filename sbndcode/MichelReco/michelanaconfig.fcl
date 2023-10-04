@@ -28,8 +28,15 @@ analyseMichels:
   CaloSkimLabel:	"caloskimCalorimetry"
   UseWPlaneOnly:	0			# 0 = Use all planes, 1 = use only collection plane
   SliceLabel:		"pandora"
+  WVFLabel:		"opdaq"
+  PDMapAlg: {
+    tool_type: sbndPDMapAlg
+  }
   RecombinationFactor:	6.4e-1
   UseTrack:		true
   UseShower:		true
+  TimeStart:		-0.2
+  TimeEnd:		5.
+  MakeHists:		false
 }
 END_PROLOG

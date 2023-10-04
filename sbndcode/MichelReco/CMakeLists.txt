@@ -36,6 +36,7 @@ set(      MODULE_LIBRARIES larcorealg::Geometry
         )
 # cet_build_plugin(AnalyzeMichels art::Module SOURCE AnalyzeMichels_module.cc LIBRARIES ${MODULE_LIBRARIES} )
 cet_build_plugin(AnalyseMichels art::Module SOURCE AnalyseMichels_module.cc LIBRARIES ${MODULE_LIBRARIES} )
+cet_build_plugin(AnalyseWaveforms art::Module SOURCE AnalyseWaveforms_module.cc LIBRARIES ${MODULE_LIBRARIES} )
 # install_headers()
 install_fhicl()
 install_source()

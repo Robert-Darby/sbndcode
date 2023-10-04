@@ -1,0 +1,5 @@
+#include "run_fragmentproducers.fcl"
+
+physics.producers.pmttriggerproducer.WindowStart: -1510.
+physics.producers.pmttriggerproducer.WindowEnd: 1510.
+
