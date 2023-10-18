@@ -502,7 +502,7 @@ void sbnd::trigger::pmtSoftwareTriggerProducer::SimpleThreshAlgo(int i_ch){
   
   // auto start_threshold = ( start_adc_thres > (nsigma_start * baseline_sigma) ? (baseline-start_adc_thres) : (baseline-(nsigma_start * baseline_sigma)));
   // auto end_threshold = ( end_adc_thres > (nsigma_end * baseline_sigma) ? (baseline - end_adc_thres) : (baseline - (nsigma_end * baseline_sigma)));
-  baseline = 8000;
+  // baseline = 8000;
   auto start_threshold = baseline-start_adc_thres;
   auto end_threshold   = baseline-end_adc_thres; 
 

@@ -260,7 +260,7 @@ outputs:
      dataTier:    "reconstructed"
      outputCommands: [
          "keep *_*_*_*",
-         "drop raw::OpDetWaveforms_*_*_*",
+//         "drop raw::OpDetWaveforms_*_*_*",
          "drop *raw::RawDigits*_*_*_*",
          #"drop sim::SimChannels_*_*_*",
          "drop sim::OpDetBacktrackerRecords_*_*_*",

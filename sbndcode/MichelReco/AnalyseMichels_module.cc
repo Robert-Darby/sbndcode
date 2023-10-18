@@ -60,6 +60,39 @@
 #include "larsim/Utils/TruthMatchUtils.h"
 #include "larreco/Calorimetry/CalorimetryAlg.h"
 
+////////////////////////////////////////////////////////////////////////
+// Class:       pmtSoftwareTriggerProducer
+// Plugin Type: producer (Unknown Unknown)
+// File:        pmtSoftwareTriggerProducer_module.cc
+//
+// Generated at Thu Feb 17 13:22:51 2022 by Patrick Green using cetskelgen
+// from  version .
+
+// Module to implement software trigger metrics to the PMT Trigger simulation
+// Input: artdaq fragment output from the pmtArtdaqFragmentProducer.cc module
+// Calculates various PMT metrics for every event (that passes the hardware trigger)
+// Output: sbnd::trigger::pmtSoftwareTrigger data product 
+
+// More information can be found at:
+// https://sbnsoftware.github.io/sbndcode_wiki/SBND_Trigger
+////////////////////////////////////////////////////////////////////////
+
+#include "art/Framework/Core/EDProducer.h"
+#include "art/Framework/Core/ModuleMacros.h"
+#include "art/Framework/Principal/Event.h"
+#include "art/Framework/Principal/Handle.h"
+#include "art/Framework/Principal/Run.h"
+#include "art/Framework/Principal/SubRun.h"
+#include "canvas/Utilities/InputTag.h"
+#include "fhiclcpp/ParameterSet.h"
+#include "messagefacility/MessageLogger/MessageLogger.h"
+#include "art_root_io/TFileService.h"
+
+#include "sbndaq-artdaq-core/Overlays/Common/CAENV1730Fragment.hh"
+#include "sbndaq-artdaq-core/Overlays/FragmentType.hh"
+#include "artdaq-core/Data/Fragment.hh"
+#include "artdaq-core/Data/ContainerFragment.hh"
+
 #include "art/Utilities/ToolMacros.h"
 
 //LArSoft Includes
@@ -118,6 +151,7 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   void FindRecoMichelTrack(const art::Event& e);
   void FindRecoMichel(const art::Event& e);
   void FindOpticalData(const art::Event& e);
+  void FindFragmentData(const art::Event& e);
 
   // Create out output tree
   TTree* fTree;
@@ -144,7 +178,7 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
 
 
   // Event Variables
-  int fEventID;
+  int fEventID, fEventRun, fEventSub;
   int fNPFParticles;
   int fEventNOpHits;
   std::vector<int> fPFParticlePDG;
@@ -361,6 +395,12 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   std::vector<float> fRecoMuonEndBendinessVect;
   TVector3 *fRecoMuonEndVect;
 
+  // PMT Fragments
+  std::vector<int> fFragmentID;
+  std::vector<float> fFragmentTimeStamp;
+  std::vector<int> fWvfmsStartBin;
+  std::vector<std::vector<uint16_t>> fWvfmsVec;
+
   // NonClustered Hits
   std::vector<float> fNonClustX;
   std::vector<float> fNonClustY;
@@ -391,9 +431,10 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   const std::string fHitSpacePointLabel;
   const std::string fTrackCaloLabel;
   const std::string fOpHitLabel;
+  const std::string fPMTFragmentLabel;
+  const unsigned fWvfmLength;
   const int sUseWPlaneOnly;
   const std::string fSliceLabel;
-  const std::string fWVFLabel;
   const std::unique_ptr<opdet::PDMapAlg> fPDMapAlgPtr;
   const float fRecombinationFactor;
   const bool fUseTrack;
@@ -425,9 +466,10 @@ sbnd::AnalyseMichels::AnalyseMichels(fhicl::ParameterSet const& p)
   , fHitSpacePointLabel(p.get<std::string>("HitSpacePointLabel"))
   , fTrackCaloLabel(p.get<std::string>("TrackCaloLabel"))
   , fOpHitLabel(p.get<std::string>("OpHitLabel"))
+  , fPMTFragmentLabel(p.get<std::string>("PMTFragmentLabel", "fragmentProducer"))
+  , fWvfmLength(p.get<unsigned>("FragmentLength", 5120))
   , sUseWPlaneOnly(p.get<int>("UseWPlaneOnly"))
   , fSliceLabel(p.get<std::string>("SliceLabel"))
-  , fWVFLabel(p.get<std::string>("WVFLabel"))
   , fPDMapAlgPtr(art::make_tool<opdet::PDMapAlg>(p.get<fhicl::ParameterSet>("PDMapAlg")))
   , fRecombinationFactor(p.get<float>("RecombinationFactor"))
   , fUseTrack(p.get<bool>("UseTrack"))
@@ -454,6 +496,8 @@ void sbnd::AnalyseMichels::analyze(art::Event const& e)
 {
   // Implementation of required member function here.
   fEventID = e.id().event();
+  fEventSub = e.subRun();
+  fEventRun = e.run();
 
 // std::cout << __FILE__ << "::" << __func__ << "():[" << __LINE__ << "]\t\n";
 
@@ -525,6 +569,7 @@ void sbnd::AnalyseMichels::analyze(art::Event const& e)
     if(fIsShower) FindRecoMichelShower(e);
     else if(fIsTrack) FindRecoMichelTrack(e);
     FindOpticalData(e);
+    FindFragmentData(e);
     fTree->Fill();
   }
 }
@@ -539,6 +584,9 @@ void sbnd::AnalyseMichels::beginJob()
 
   // Add branches to the TTree
   // Event
+  fTree->Branch("event.Run",                     &fEventRun);
+  fTree->Branch("event.Sub",                     &fEventSub);
+  fTree->Branch("event.ID",                     &fEventID);
   fTree->Branch("event.ID", 			&fEventID);
   fTree->Branch("event.NPFParticles", 		&fNPFParticles);
   fTree->Branch("event.NOpHits",		&fEventNOpHits);
@@ -1012,6 +1060,11 @@ void sbnd::AnalyseMichels::ResetVars()
   fNonClustSADC.clear();
   fNonClustPlane.clear();
   fNonClustIsMichel.clear();
+
+  fFragmentID.clear();
+  fFragmentTimeStamp.clear();
+  fWvfmsStartBin.clear();
+  fWvfmsVec.clear();;
 }
 
 
@@ -1315,4 +1368,50 @@ void sbnd::AnalyseMichels::FindOpticalData(
     for(auto& oph : ophits) ophits_hist->Fill(oph.StartTime(), oph.PE());
   }
 }
+
+void sbnd::AnalyseMichels::FindFragmentData(
+  const art::Event& e)
+{
+  art::Handle<std::vector<artdaq::Fragment>> fragHandle;
+  std::vector<art::Ptr<artdaq::Fragment>> fragVec;
+  if (e.getByLabel(fPMTFragmentLabel, fragHandle))
+    art::fill_ptr_vector(fragVec, fragHandle);
+
+  std::vector<std::vector<uint16_t>> fWvfmsVec;
+  fWvfmsVec.resize(15*8); // 15 pmt channels per fragment, 8 fragments per trigger
+  for(unsigned fragmentIdx = 0; fragmentIdx<fragVec.size(); fragmentIdx++) {
+    const auto& frag = fragVec[fragmentIdx];
+    int fragId = static_cast<int>(frag->fragmentID()); 
+    fFragmentID.push_back(fragId);
+    sbndaq::CAENV1730Fragment bb(*frag);
+    auto const* md = bb.Metadata();
+    // access timestamp
+    uint32_t timestamp = md->timeStampNSec;
+    fFragmentTimeStamp.push_back(timestamp);
+    double fFragTimeStamp = timestamp - fTimeStart;
+    int startbin = (fFragTimeStamp >= 1000) ? 0 : int(500 - (fFragTimeStamp)/2); // units of bins
+    fWvfmsStartBin.push_back(startbin);
+
+    // access waveforms in fragment and save
+    const uint16_t* data_begin = reinterpret_cast<const uint16_t*>(frag->dataBeginBytes() 
+                 + sizeof(sbndaq::CAENV1730EventHeader));
+    const uint16_t* value_ptr =  data_begin;
+    uint16_t value = 0;
+
+    // channel offset
+    size_t nChannels = 15; // 15 pmts per fragment
+    size_t ch_offset = 0;
+    for (size_t i_ch = 0; i_ch < nChannels; ++i_ch) {
+      fWvfmsVec[i_ch + nChannels*fragId].resize(fWvfmLength);
+      ch_offset = (size_t)(i_ch * fWvfmLength);
+      //--loop over waveform samples
+      for(size_t i_t = 0; i_t < fWvfmLength; ++i_t){ 
+        value_ptr = data_begin + ch_offset + i_t; // pointer arithmetic
+        value = *(value_ptr);
+        fWvfmsVec[i_ch + nChannels*fragId][i_t] = value;
+      } //--end loop samples
+    } //--end loop channels
+  } // Waveform handle loop
+}
+
 DEFINE_ART_MODULE(sbnd::AnalyseMichels)
