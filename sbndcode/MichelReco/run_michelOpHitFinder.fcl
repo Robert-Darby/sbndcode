@@ -1,0 +1,37 @@
+#include "michelophitfinder.fcl"
+#include "simulationservices_sbnd.fcl"
+
+
+
+process_name: MichelOpHitFinder # The process name must NOT contain any underscores
+
+source:
+{
+  module_type: RootInput # Telling art we want a ROOT input
+  maxEvents:   -1
+}
+
+services:
+{
+  TFileService: { fileName: "analysisOutput.root"}
+}
+
+physics:
+{
+  producers:
+  {
+    mophf: @local::michelOpHitFinder  #inserts into workflow, matches name in config fcl
+  }
+}
+  simulate: [
+              mophf
+            ]
+  # The output stream, there could be more than one if using filters
+  stream1: [ out1 ]
+
+  # Contains the paths that modify the art::event
+  michel_paths: [ simulate ]
+
+  # Contains the paths that do not modify the art::Event
+  end_paths: [ stream1 ]
+}

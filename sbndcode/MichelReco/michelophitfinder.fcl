@@ -1,0 +1,13 @@
+BEGIN_PROLOG
+
+michelOpHitFinder:
+{
+  module_type:      	"MichelOpHitFinder"
+  OpDetWaveformLabel:	"opdecopmt"  
+  OpDetTypes:		["pmt_coated", "pmt_uncoated"] # Detectors to consider
+  MinADC:		[13500, 13500]	# Consider only waveforms that reach below this threshold
+  MuonDelay:		0.2		# Minimum time (us) after muon (largest) peak to search for Michel
+  PositivePolarity:	false		# Whether ADC counts increase upon receiving signal
+  MakeTree:		true
+}
+END_PROLOG
