@@ -1,0 +1,68 @@
+#include "pmttriggerproducer.fcl"
+#include "michelfilterconfig.fcl"
+#include "pmtArtdaqFragmentProducer.fcl"
+#include "pmtsoftwaretriggerproducer.fcl"
+
+#include "services_sbnd.fcl"
+#include "messages_sbnd.fcl"
+#include "sam_sbnd.fcl"
+#include "larfft_sbnd.fcl"
+#include "signalservices_sbnd.fcl"
+#include "simulationservices_sbnd.fcl"
+#include "detsimmodules_sbnd.fcl"
+#include "opdetdigitizer_sbnd.fcl"
+
+#include "hitfindermodules_sbnd.fcl"
+#include "cluster_sbnd.fcl"
+#include "trackfindermodules_sbnd.fcl"
+#include "calorimetry_sbnd.fcl"
+#include "showerfindermodules.fcl"
+#include "databaseutil_sbnd.fcl"
+#include "vertexfindermodules.fcl"
+#include "simulationservices_sbnd.fcl"
+#include "rootoutput_sbnd.fcl"
+
+process_name: MichelTrigger # The process name must NOT contain any underscores
+
+source:
+{
+  module_type: RootInput # Telling art we want a ROOT input
+  maxEvents:   -1
+}
+
+services:
+{
+  TFileService: { fileName: "filter_Output.root"}
+  @table::sbnd_simulation_services
+}
+
+physics:
+{
+  filters:
+  {
+    coinfilt: @local::checkCoincidence
+  }
+
+  simulate: [
+              coinfilt
+            ]
+  # The output stream, there could be more than one if using filters
+  stream1: [ out1 ]
+
+  # Contains the paths that modify the art::event
+  trigger_paths: [ simulate ]
+
+  # Contains the paths that do not modify the art::Event
+  end_paths: [ stream1 ]
+}
+
+outputs:
+{
+  out1:
+  {
+                    @table::sbnd_rootoutput
+    dataTier:       "simulated"
+    outputCommands: [ "keep *_*_*_*" ]
+    SelectEvents:   [ "simulate" ]
+  }
+}

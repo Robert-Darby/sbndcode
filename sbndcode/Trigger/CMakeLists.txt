@@ -42,6 +42,7 @@ add_subdirectory(PMT)
 
 cet_build_plugin(ArtdaqFragmentProducer art::module SOURCE ArtdaqFragmentProducer_module.cc LIBRARIES ${MODULE_LIBRARIES})
 cet_build_plugin(MetricProducer art::module SOURCE MetricProducer_module.cc LIBRARIES ${MODULE_LIBRARIES})
+cet_build_plugin(CoincidenceCheck art::module SOURCE CoincidenceCheck_module.cc LIBRARIES ${MODULE_LIBRARIES})
 
 install_headers()
 install_fhicl()

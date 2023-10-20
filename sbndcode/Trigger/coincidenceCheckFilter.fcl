@@ -1,0 +1,13 @@
+BEGIN_PROLOG
+
+coincidenceCcheck:
+{
+  ModuleType:		"CoincidenceCheck"
+  CRTFragmentLabel:
+  CAENFragmentLabel:	
+  CoincidenceWindow:	0.24			# Time (us) after each CRT hit to check for coincidence
+  CRTPlanes:		[1, 1, 0, 0, 0, 0, 0] # Index = CRT plane no. 0 = no signal, 1 = signal, 2 = don't check.
+  CRTLogic:		"AND"
+}
+
+END_PROLOG
