@@ -1,13 +1,15 @@
 BEGIN_PROLOG
 
-coincidenceCcheck:
+coincidenceCheck:
 {
-  ModuleType:		"CoincidenceCheck"
-  CRTFragmentLabel:
-  CAENFragmentLabel:	
+  module_type:		"CoincidenceCheck"
   CoincidenceWindow:	0.24			# Time (us) after each CRT hit to check for coincidence
-  CRTPlanes:		[1, 1, 0, 0, 0, 0, 0] # Index = CRT plane no. 0 = no signal, 1 = signal, 2 = don't check.
-  CRTLogic:		"AND"
+  CRTPlanes:		[0, 0, 0, 0, 0, 1, 1]	# Index = CRT plane no. [ bottom, upstream, downstream, left, right, top low, top high]
+                                                # 0 = no signal, 1 = signal, 2 = don't check.
+  CRTTriggerOffset:	1700000.
+  CRTOnly:		true			# Look for coincidence between CRT planes only
+  CAENTriggerOffset:	0.5
+  Verbose:		true
 }
 
 END_PROLOG

@@ -1,7 +1,4 @@
-#include "pmttriggerproducer.fcl"
-#include "michelfilterconfig.fcl"
-#include "pmtArtdaqFragmentProducer.fcl"
-#include "pmtsoftwaretriggerproducer.fcl"
+#include "coincidenceCheckFilter.fcl"
 
 #include "services_sbnd.fcl"
 #include "messages_sbnd.fcl"
@@ -40,11 +37,11 @@ physics:
 {
   filters:
   {
-    coinfilt: @local::checkCoincidence
+    coincidencefilt: @local::coincidenceCheck
   }
 
   simulate: [
-              coinfilt
+              coincidencefilt
             ]
   # The output stream, there could be more than one if using filters
   stream1: [ out1 ]

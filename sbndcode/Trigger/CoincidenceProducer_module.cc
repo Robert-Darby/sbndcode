@@ -1,16 +1,13 @@
 ////////////////////////////////////////////////////////////////////////
-// Class:       CoincidenceCheck
-// Plugin Type: filter (Unknown Unknown)
-// File:        CoincidenceCheck_module.cc
+// Class:       CoincidenceProducer
+// Plugin Type: producer (Unknown Unknown)
+// File:        CoincidenceProducer_module.cc
 //
-// Generated at Thu Oct 19 15:06:07 2023 by Robert Darby using cetskelgen
+// Generated at Wed Oct 25 14:55:24 2023 by Robert Darby using cetskelgen
 // from  version .
-//
-// Thise module checks for coincidence between CRT/PMT trigger times
-// within a given window. Can be used for CRT and PDS or CRT only.
 ////////////////////////////////////////////////////////////////////////
 
-#include "art/Framework/Core/EDFilter.h"
+#include "art/Framework/Core/EDProducer.h"
 #include "art/Framework/Core/ModuleMacros.h"
 #include "art/Framework/Principal/Event.h"
 #include "art/Framework/Principal/Handle.h"
@@ -20,36 +17,39 @@
 #include "fhiclcpp/ParameterSet.h"
 #include "messagefacility/MessageLogger/MessageLogger.h"
 
-
 #include "lardata/DetectorInfoServices/DetectorClocksService.h"
 #include "lardata/DetectorInfoServices/DetectorClocksServiceStandard.h"
 
+#include "sbnobj/SBND/Trigger/Coincidence.hh"
 #include "sbndaq-artdaq-core/Overlays/Common/BernCRTFragmentV2.hh"
 #include "sbndaq-artdaq-core/Overlays/Common/CAENV1730Fragment.hh"
 #include "sbndaq-artdaq-core/Overlays/FragmentType.hh"
 #include "artdaq-core/Data/Fragment.hh"
 #include "artdaq-core/Data/ContainerFragment.hh"
 
-
+#include<map>
+#include<vector>
 #include <memory>
 
-class CoincidenceCheck;
+namespace sbnd {
+  class CoincidenceProducer;
+}
 
 
-class CoincidenceCheck : public art::EDFilter {
+class sbnd::CoincidenceProducer : public art::EDProducer {
 public:
-  explicit CoincidenceCheck(fhicl::ParameterSet const& p);
+  explicit CoincidenceProducer(fhicl::ParameterSet const& p);
   // The compiler-generated destructor is fine for non-base
   // classes without bare pointers or other resource use.
 
   // Plugins should not be copied or assigned.
-  CoincidenceCheck(CoincidenceCheck const&) = delete;
-  CoincidenceCheck(CoincidenceCheck&&) = delete;
-  CoincidenceCheck& operator=(CoincidenceCheck const&) = delete;
-  CoincidenceCheck& operator=(CoincidenceCheck&&) = delete;
+  CoincidenceProducer(CoincidenceProducer const&) = delete;
+  CoincidenceProducer(CoincidenceProducer&&) = delete;
+  CoincidenceProducer& operator=(CoincidenceProducer const&) = delete;
+  CoincidenceProducer& operator=(CoincidenceProducer&&) = delete;
 
   // Required functions.
-  bool filter(art::Event& e) override;
+  void produce(art::Event& e) override;
 
   // Selected optional functions.
   void beginJob() override;
@@ -59,49 +59,39 @@ private:
 
   void getCRTTimeStamps(
     artdaq::Fragment& frag,
-    std::multimap<double, size_t>& fragTimeStamps);
+    std::multimap<double, unsigned>& fragTimeStamps);
   void getCAEN1730FragmentTimeStamp(
     const artdaq::Fragment &frag,
-    std::multimap<double, size_t>& fragTimeStamps);
-  bool getCoincidence(
-    const std::multimap<double, size_t>& fragTimeStamps);
+    std::multimap<double, unsigned>& fragTimeStamps);
+  void getCoincidence(
+    const std::multimap<double, unsigned>& fragTimeStamps,
+    std::unique_ptr<std::vector<sbnd::Coincidence>>& coincidence_v);
 
   // FHICL Params
   const double fCoincidenceWindow;
-  const std::vector<size_t> fCRTPlanes;
   const float fCRTTriggerOffset;
   const float fCRTClockFreq;
-  const std::string fCRTLogic;
-  const bool fCRTOnly;
   const double fCAENTriggerOffset;
   const bool fVerbose;
-
-  unsigned fNCoincidentFrags;
-  float fSamplingFreq;
 };
 
-
-CoincidenceCheck::CoincidenceCheck(fhicl::ParameterSet const& p)
-  : EDFilter{p}  // ,
+sbnd::CoincidenceProducer::CoincidenceProducer(fhicl::ParameterSet const& p)
+  : EDProducer{p}  // ,
   , fCoincidenceWindow(p.get<double>("CoincidenceWindow", 0.24))
-  , fCRTPlanes(p.get<std::vector<size_t>>("CRTPlanes"))
   , fCRTTriggerOffset(p.get<float>("CRTTriggerOffset", 1700000))
   , fCRTClockFreq(p.get<float>("CRTClockFreq", 1000.))
-  , fCRTLogic(p.get<std::string>("CRTLogic", "AND"))
-  , fCRTOnly(p.get<bool>("CRTOnly", false))
   , fCAENTriggerOffset(p.get<double>("CAENTriggerOffset", 0.5))
   , fVerbose(p.get<bool>("Verbose", false))
 {
-  fNCoincidentFrags = std::count(fCRTPlanes.begin(), fCRTPlanes.end(), 0) +
-                      std::count(fCRTPlanes.begin(), fCRTPlanes.end(), 1);
-
-  auto const clockData = art::ServiceHandle<detinfo::DetectorClocksService const>()->DataForJob();
-  fSamplingFreq = clockData.OpticalClock().Frequency(); // MHz
+  produces<std::vector<sbnd::Coincidence>>();
 }
 
-bool CoincidenceCheck::filter(art::Event& e)
+void sbnd::CoincidenceProducer::produce(art::Event& e)
 {
-  std::multimap<double, size_t> fragTimeStamps;
+  std::unique_ptr<std::vector<sbnd::Coincidence>>
+    coincidence_v(new std::vector<sbnd::Coincidence>);
+
+  std::multimap<double, unsigned> fragTimeStamps;
   std::vector<art::Handle<artdaq::Fragments>> fragmentHandles = e.getMany<std::vector<artdaq::Fragment>>();
 
   // loop over fragment handles
@@ -123,28 +113,30 @@ bool CoincidenceCheck::filter(art::Event& e)
         if (frag.type()==sbndaq::detail::FragmentType::BERNCRTV2) {
           getCRTTimeStamps(frag, fragTimeStamps);
         }
-        else if (!fCRTOnly && frag.type()==sbndaq::detail::FragmentType::CAENV1730) {
+        else if (frag.type()==sbndaq::detail::FragmentType::CAENV1730) {
           getCAEN1730FragmentTimeStamp(frag, fragTimeStamps);
         } //if is pmt frag
       }
     } // Fragment loop
-  } // Fragment handle loop 
-  return getCoincidence(fragTimeStamps);
+  } // Fragment handle loop
+  getCoincidence(fragTimeStamps, coincidence_v);
+  for(auto coinc = coincidence_v->begin(); coinc != coincidence_v->end(); coinc++) std::cout << "Coincidence found at: " << coinc->TimeStamp << std::endl;
+  e.put(std::move(coincidence_v));  
 }
 
-void CoincidenceCheck::beginJob()
+void sbnd::CoincidenceProducer::beginJob()
 {
   // Implementation of optional member function here.
 }
 
-void CoincidenceCheck::endJob()
+void sbnd::CoincidenceProducer::endJob()
 {
   // Implementation of optional member function here.
 }
 
-void CoincidenceCheck::getCRTTimeStamps(
+void sbnd::CoincidenceProducer::getCRTTimeStamps(
   artdaq::Fragment& frag,
-  std::multimap<double, size_t>& fragTimeStamps)
+  std::multimap<double, unsigned>& fragTimeStamps)
 {
   // use  fragment ID to get plane information
   sbndaq::BernCRTFragmentV2 bern_fragment(frag);
@@ -152,7 +144,6 @@ void CoincidenceCheck::getCRTTimeStamps(
   auto thisone = frag.fragmentID();  uint plane = (thisone & 0x0700) >> 8;
   if (plane>7) {std::cout << "bad plane value " << plane << std::endl; plane=0;}
   // Check if this fragment is considered in the coincidence check
-  if(fCRTPlanes[plane] == 2) return;
   for(unsigned int iHit = 0; iHit < md->hits_in_fragment(); iHit++) {
     sbndaq::BernCRTHitV2 const* bevt = bern_fragment.eventdata(iHit);
     // require that this is data and not clock reset (0xC), and that the ts1 time is valid (0x2)
@@ -162,11 +153,11 @@ void CoincidenceCheck::getCRTTimeStamps(
       fragTimeStamps.insert(std::pair<float, size_t>(thistime, plane));
     }
   }
-} // CoincidenceCheck::getCRTTimeStamps
+} // CoincidenceProducer::getCRTTimeStamps
 
-void CoincidenceCheck::getCAEN1730FragmentTimeStamp(
+void sbnd::CoincidenceProducer::getCAEN1730FragmentTimeStamp(
   const artdaq::Fragment &frag,
-  std::multimap<double, size_t>& fragTimeStamps)
+  std::multimap<double, unsigned>& fragTimeStamps)
 {
   // get fragment metadata
   sbndaq::CAENV1730Fragment bb(frag);
@@ -178,34 +169,31 @@ void CoincidenceCheck::getCAEN1730FragmentTimeStamp(
   fragTimeStamps.insert(std::pair<float, size_t>(timestamp, 8));
 }
 
-bool CoincidenceCheck::getCoincidence(
-  const std::multimap<double, size_t>& fragTimeStamps)
+void sbnd::CoincidenceProducer::getCoincidence(
+  const std::multimap<double, unsigned>& fragTimeStamps,
+  std::unique_ptr<std::vector<sbnd::Coincidence>>& coincidence_v)
 {
   // Loop over chronological CRT/PDS tiggers
   for(auto it = fragTimeStamps.begin(); it != fragTimeStamps.end(); it++) {
     if(fVerbose) std::cout << "Plane: " << it->second << " Time: " << it->first << std::endl;
-    unsigned count_coincident_frags = 0;
+    std::vector<unsigned> coinc_frags; coinc_frags.push_back(it->second);
     std::vector<bool> frag_present(8, false);
     frag_present[it->second] = true;
     // Loop over all triggers in specified coincidence window
     float window_end = it->first + fCoincidenceWindow;
+    int frags_in_window = 0;
     for(auto jt = it; jt != fragTimeStamps.end(); jt++) {
-      frag_present[jt->second] = true;
+      frags_in_window++;
       if(jt->first > window_end) break;
+      if(jt->second == it->second) continue;
+      coinc_frags.push_back(jt->second);
     }
-    if(!fCRTOnly && !frag_present[7]) continue;
-    // Check for coincidence between specified CRT planes
-    for(size_t fid = 0; fid < 8; fid++) {
-      if((fCRTPlanes[fid] == 2) ||
-         (fCRTPlanes[fid] != frag_present[fid])) continue;
-      else {count_coincident_frags++;}
-    }
-    if(count_coincident_frags == fNCoincidentFrags) {
-      std::cout << "Found coincidence at: " << it->first << std::endl;
-      return true;
+    if(coinc_frags.size() > 1) {
+      std::sort(coinc_frags.begin(), coinc_frags.end());
+      coincidence_v->emplace_back(sbnd::Coincidence(it->first, coinc_frags));
+      std::advance(it, frags_in_window);
     }
   } // Looop over timestamps
-  return false;
 }
 
-DEFINE_ART_MODULE(CoincidenceCheck)
+DEFINE_ART_MODULE(sbnd::CoincidenceProducer)
