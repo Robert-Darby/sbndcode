@@ -25,6 +25,7 @@ analyseMichels:
   HitSpacePointLabel:	"pandora"
   TrackCaloLabel:	"pandoraCalo"
   OpHitLabel:		"ophitpmt"
+  CRTHitLabel:		"crthit"
   CaloSkimLabel:	"caloskimCalorimetry"
   UseWPlaneOnly:	0			# 0 = Use all planes, 1 = use only collection plane
   SliceLabel:		"pandora"

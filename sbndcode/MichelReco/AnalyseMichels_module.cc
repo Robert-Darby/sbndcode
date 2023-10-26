@@ -48,6 +48,7 @@
 #include "lardataobj/RecoBase/Hit.h"
 #include "sbncode/OpDet/PDMapAlg.h"
 #include "lardataobj/RecoBase/OpHit.h"
+#include "sbnobj/Common/CRT/CRTHit.hh"
 #include "lardataobj/RecoBase/Track.h"
 #include "lardataobj/RecoBase/Shower.h"
 #include "sbndcode/RecoUtils/RecoUtils.h"
@@ -152,6 +153,7 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   void FindRecoMichel(const art::Event& e);
   void FindOpticalData(const art::Event& e);
   void FindFragmentData(const art::Event& e);
+  void FindCRTHitData(const art::Event& e);
 
   // Create out output tree
   TTree* fTree;
@@ -222,6 +224,12 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   std::vector<double> fWVFBaseline;
   std::vector<double> fWVFSigma;
   std::vector<std::string> fWVFDet;
+
+  std::vector<int> fCRTHitPlane;
+  std::vector<float> fCRTHitTime;
+  std::vector<float> fCRTHitX;
+  std::vector<float> fCRTHitY;
+  std::vector<float> fCRTHitZ;
 
   // MC Michel
   int fMCMichelID;
@@ -431,7 +439,8 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   const std::string fHitSpacePointLabel;
   const std::string fTrackCaloLabel;
   const std::string fOpHitLabel;
-  const std::string fPMTFragmentLabel;
+  const std::string fFragmentLabel;
+  const std::string fCRTHitLabel;
   const unsigned fWvfmLength;
   const int sUseWPlaneOnly;
   const std::string fSliceLabel;
@@ -466,7 +475,8 @@ sbnd::AnalyseMichels::AnalyseMichels(fhicl::ParameterSet const& p)
   , fHitSpacePointLabel(p.get<std::string>("HitSpacePointLabel"))
   , fTrackCaloLabel(p.get<std::string>("TrackCaloLabel"))
   , fOpHitLabel(p.get<std::string>("OpHitLabel"))
-  , fPMTFragmentLabel(p.get<std::string>("PMTFragmentLabel", "fragmentProducer"))
+  , fFragmentLabel(p.get<std::string>("FragmentLabel", "fragmentProducer"))
+  , fCRTHitLabel(p.get<std::string>("CRTHitLabel"))
   , fWvfmLength(p.get<unsigned>("FragmentLength", 5120))
   , sUseWPlaneOnly(p.get<int>("UseWPlaneOnly"))
   , fSliceLabel(p.get<std::string>("SliceLabel"))
@@ -560,6 +570,8 @@ void sbnd::AnalyseMichels::analyze(art::Event const& e)
    
   // Get ID of Michel - always the last electron
 
+  std::cout << "N MCParticles: " << mctruthVect.size() << std::endl;
+
   for(auto const &mcp: mctruthVect) {
     if(abs(mcp->PdgCode()) != 13 || abs(mcp->EndX()) > 200. || abs(mcp->EndY()) > 200. || mcp->EndZ() < 0. || mcp->EndZ() > 500.) continue;
     ResetVars();
@@ -569,7 +581,8 @@ void sbnd::AnalyseMichels::analyze(art::Event const& e)
     if(fIsShower) FindRecoMichelShower(e);
     else if(fIsTrack) FindRecoMichelTrack(e);
     FindOpticalData(e);
-    FindFragmentData(e);
+//    FindFragmentData(e);
+    FindCRTHitData(e);
     fTree->Fill();
   }
 }
@@ -811,6 +824,12 @@ void sbnd::AnalyseMichels::beginJob()
   fTree->Branch("nonClust.SADC",                   &fNonClustSADC);
   fTree->Branch("nonClust.Plane",                   &fNonClustPlane);
   fTree->Branch("nonClust.IsMichel",		&fNonClustIsMichel);
+
+  fTree->Branch("crtHit.Plane",			&fCRTHitPlane);
+  fTree->Branch("crtHit.Time",                 &fCRTHitTime);
+  fTree->Branch("crtHit.X",                 	&fCRTHitX);
+  fTree->Branch("crtHit.Y",                 	&fCRTHitY);
+  fTree->Branch("crtHit.Z",                 	&fCRTHitZ);
 
   fTree->Branch("countpfpf",				&countpfps);
   fTree->Branch("lastchar",				&lastchar);
@@ -1061,6 +1080,13 @@ void sbnd::AnalyseMichels::ResetVars()
   fNonClustPlane.clear();
   fNonClustIsMichel.clear();
 
+  // CRT Hits
+  fCRTHitPlane.clear();
+  fCRTHitTime.clear();
+  fCRTHitX.clear();
+  fCRTHitY.clear();
+  fCRTHitZ.clear();
+
   fFragmentID.clear();
   fFragmentTimeStamp.clear();
   fWvfmsStartBin.clear();
@@ -1081,7 +1107,7 @@ void sbnd::AnalyseMichels::FillMC(
        (abs(mcp->Position(pos).Y()) < 200.) &&
        (mcp->Position(pos).Z() > 0.) &&
        (mcp->Position(pos).Z() < 500.)) {
-      fMCMuonTime = mcp->T(pos); 
+      fMCMuonTime = mcp->T(pos) / 1000.; // us relative to beam spill
       fMCMuonStartX = mcp->Position(pos).X();
       fMCMuonStartY = mcp->Position(pos).Y();
       fMCMuonStartZ = mcp->Position(pos).Z();
@@ -1123,7 +1149,7 @@ void sbnd::AnalyseMichels::FillMC(
   
   for(auto& mcp2 : mctruthVect) {
     if(abs(mcp2->PdgCode()) != 11 || mcp2->Mother() != fMCMuonG4ID) continue;
-    fMCMichelTime = mcp2->T();
+    fMCMichelTime = mcp2->T() / 1000.; // us relative to beam spill
     fMCMichelNPoints = mcp2->NumberTrajectoryPoints();  
     unsigned int i  = mcp2->NumberTrajectoryPoints() -1;
     unsigned int j = mcp2->NumberTrajectoryPoints() / 2;
@@ -1328,24 +1354,32 @@ void sbnd::AnalyseMichels::FindOpticalData(
   const art::Event& e)
 {
   art::Handle<std::vector<recob::OpHit>> ophitHandle;
-  std::vector<art::Ptr<recob::OpHit>> ophitVec;
-  if (e.getByLabel(fOpHitLabel, ophitHandle))
-    art::fill_ptr_vector(ophitVec, ophitHandle);
+  e.getByLabel(fOpHitLabel, ophitHandle);
 
-  std::cout << "NOpHits: " << ophitVec.size() << std::endl;
-  fEventNOpHits = ophitVec.size();
+  std::cout << "NOpHits: " << ophitHandle->size() << std::endl;
+  fEventNOpHits = ophitHandle->size();
 
-  std::vector<recob::OpHit> ophits;
-  for(unsigned i=0; i<ophitVec.size();i++) {
-    auto& oph = *(ophitVec)[i];
-    if(oph.StartTime() > fTimeEnd ||
-       oph.StartTime() < fTimeStart) continue;
-    ophits.emplace_back(oph);
+  std::vector<recob::OpHit> ophits(ophitHandle->size());
+  // Count how many ophits are in time
+  double start = fTimeStart; double end = fTimeEnd;
+  auto opHitInWindow =
+    [start, end, this](const recob::OpHit& oph)-> bool
+      {return ((oph.StartTime() > start) &&
+               (oph.StartTime() < end)); };
+  auto ophit_it = std::copy_if(ophitHandle->begin(), ophitHandle->end(), ophits.begin(), opHitInWindow);
+  ophits.resize(std::distance(ophits.begin(), ophit_it));
+  std::cout << "Intime OpHits: " << ophits.size() << std::endl;
+  if(ophits.empty()) return;
+
+  std::cout << "OpHits in time: " << ophits.size() << std::endl;
+  
+  for(auto& oph : ophits) {
     fOpHitTimes.push_back(oph.StartTime());
     fOpHitWidths.push_back(oph.Width());
     fOpHitPEs.push_back(oph.PE());
     if((oph.StartTime()*1000. > fMCMichelTime) && (oph.StartTime()*1000 < fMCMichelTime + 200)) fMichelOpHits += oph.PE();
   }
+
   std::sort(ophits.begin(), ophits.end(),
     [this] (const recob::OpHit oph1, recob::OpHit oph2)
     { return oph1.StartTime() < oph2.StartTime(); });
@@ -1374,7 +1408,7 @@ void sbnd::AnalyseMichels::FindFragmentData(
 {
   art::Handle<std::vector<artdaq::Fragment>> fragHandle;
   std::vector<art::Ptr<artdaq::Fragment>> fragVec;
-  if (e.getByLabel(fPMTFragmentLabel, fragHandle))
+  if (e.getByLabel(fFragmentLabel, fragHandle))
     art::fill_ptr_vector(fragVec, fragHandle);
 
   std::vector<std::vector<uint16_t>> fWvfmsVec;
@@ -1414,4 +1448,22 @@ void sbnd::AnalyseMichels::FindFragmentData(
   } // Waveform handle loop
 }
 
+void sbnd::AnalyseMichels::FindCRTHitData(
+  const art::Event& e)
+{
+  art::Handle<std::vector<sbn::crt::CRTHit>> crtHitHandle;
+  std::vector<art::Ptr<sbn::crt::CRTHit>> crtHitVec;
+  if (e.getByLabel(fCRTHitLabel, crtHitHandle))
+    art::fill_ptr_vector(crtHitVec, crtHitHandle);
+
+  std::cout << "CRT hits found: " << crtHitVec.size() << std::endl;
+
+  for(auto& hit : crtHitVec) {
+    fCRTHitPlane.push_back(hit->plane);
+    fCRTHitTime.push_back(hit->ts1_ns);
+    fCRTHitX.push_back(hit->x_pos);
+    fCRTHitY.push_back(hit->y_pos);
+    fCRTHitZ.push_back(hit->z_pos);
+  }
+}
 DEFINE_ART_MODULE(sbnd::AnalyseMichels)
