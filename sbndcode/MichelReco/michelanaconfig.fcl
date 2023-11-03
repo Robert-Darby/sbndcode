@@ -26,6 +26,7 @@ analyseMichels:
   TrackCaloLabel:	"pandoraCalo"
   OpHitLabel:		"ophitpmt"
   CRTHitLabel:		"crthit"
+  CoincidencePlanes:	[2, 2, 2, 2, 2, 2, 2]   # [bot, left, right, upstream, downstream, top low, top high]
   CaloSkimLabel:	"caloskimCalorimetry"
   UseWPlaneOnly:	0			# 0 = Use all planes, 1 = use only collection plane
   SliceLabel:		"pandora"
@@ -36,8 +37,8 @@ analyseMichels:
   RecombinationFactor:	6.4e-1
   UseTrack:		true
   UseShower:		true
-  TimeStart:		-0.2
-  TimeEnd:		5.
+  TimeStart:		-100000
+  TimeEnd:		100000
   MakeHists:		false
 }
 END_PROLOG

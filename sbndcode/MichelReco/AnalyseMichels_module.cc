@@ -48,6 +48,7 @@
 #include "lardataobj/RecoBase/Hit.h"
 #include "sbncode/OpDet/PDMapAlg.h"
 #include "lardataobj/RecoBase/OpHit.h"
+#include "sbnobj/SBND/Trigger/Coincidence.hh"
 #include "sbnobj/Common/CRT/CRTHit.hh"
 #include "lardataobj/RecoBase/Track.h"
 #include "lardataobj/RecoBase/Shower.h"
@@ -147,6 +148,7 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
 
   void ResetVars();
 
+  void getCoincidenceMatches(const art::Event& e);
   void FillMC(const art::Event& e, const art::Ptr<simb::MCParticle>& mcp, std::vector<art::Ptr<simb::MCParticle>>& mctruthVect);
   void FindRecoMichelShower(const art::Event& e);
   void FindRecoMichelTrack(const art::Event& e);
@@ -197,6 +199,7 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   std::vector<int> fClusterID;
   std::vector<std::string> fClusterPlane;
   int fNMuons;
+  int fNCrossingMuons;
   float fRecoMuonMichelDist;
   std::vector<bool> fPFPIsPrimary;
   std::vector<int> fPFPMother;
@@ -215,6 +218,10 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   float fSADCSigma;
   int fNSlices;
   int fNMichelNonClust;	// No. of non-clustered Michel hits in event
+  int fEventNFalseTriggers;
+  std::vector<size_t> fEventFalseTriggerPDGs;
+  std::vector<double> fEventFalseTriggerTimes;
+  std::vector<std::vector<unsigned>> fEventFalseTriggerPlanes;
 
   double fMichelOpHits;
   std::vector<double> fOpHitTimes;
@@ -377,6 +384,10 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   float fMCMuonStartY;
   float fMCMuonStartZ;
   float fMCMuonBendiness;
+  bool fMCMuonTrigger;
+  double fMCMuonTriggerTime;
+  std::vector<unsigned> fMCMuonTriggerPlanes;
+  unsigned fMCMuonCRTPlane;
 
   // Reco Muon
   int fNRecoMuonHits;
@@ -440,7 +451,10 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   const std::string fTrackCaloLabel;
   const std::string fOpHitLabel;
   const std::string fFragmentLabel;
+  const std::string fCoincidenceLabel;
   const std::string fCRTHitLabel;
+  const std::vector<unsigned> fCoincidencePlanes;
+  const unsigned fPlaneCount;
   const unsigned fWvfmLength;
   const int sUseWPlaneOnly;
   const std::string fSliceLabel;
@@ -476,7 +490,10 @@ sbnd::AnalyseMichels::AnalyseMichels(fhicl::ParameterSet const& p)
   , fTrackCaloLabel(p.get<std::string>("TrackCaloLabel"))
   , fOpHitLabel(p.get<std::string>("OpHitLabel"))
   , fFragmentLabel(p.get<std::string>("FragmentLabel", "fragmentProducer"))
+  , fCoincidenceLabel(p.get<std::string>("CoincidenceLabel", "coincidence"))
   , fCRTHitLabel(p.get<std::string>("CRTHitLabel"))
+  , fCoincidencePlanes(p.get<std::vector<unsigned>>("CoincidencePlanes"))
+  , fPlaneCount(std::count(fCoincidencePlanes.begin(), fCoincidencePlanes.end(), 1))
   , fWvfmLength(p.get<unsigned>("FragmentLength", 5120))
   , sUseWPlaneOnly(p.get<int>("UseWPlaneOnly"))
   , fSliceLabel(p.get<std::string>("SliceLabel"))
@@ -568,9 +585,8 @@ void sbnd::AnalyseMichels::analyze(art::Event const& e)
   }
 //std::cout << __FILE__ << "::" << __func__ << "():[" << __LINE__ << "]\t\n";
    
-  // Get ID of Michel - always the last electron
-
-  std::cout << "N MCParticles: " << mctruthVect.size() << std::endl;
+  // Get IDs of flashes matching specific coincidence;
+  getCoincidenceMatches(e);
 
   for(auto const &mcp: mctruthVect) {
     if(abs(mcp->PdgCode()) != 13 || abs(mcp->EndX()) > 200. || abs(mcp->EndY()) > 200. || mcp->EndZ() < 0. || mcp->EndZ() > 500.) continue;
@@ -617,6 +633,7 @@ void sbnd::AnalyseMichels::beginJob()
   fTree->Branch("event.ClusterID",		&fClusterID);
   fTree->Branch("event.ClusterPlane",		&fClusterPlane);
   fTree->Branch("event.NRecoMuons",		&fNMuons);
+  fTree->Branch("event.NCrossingMuons",		&fNCrossingMuons);
   fTree->Branch("event.RecoMuonMichelDist",	&fRecoMuonMichelDist);
   fTree->Branch("event.PFPIsPrimary",		&fPFPIsPrimary);
   fTree->Branch("event.PFPMother",		&fPFPMother);
@@ -644,6 +661,10 @@ void sbnd::AnalyseMichels::beginJob()
   fTree->Branch("event.WVFBaseline",            &fWVFBaseline);
   fTree->Branch("event.WVFSigma",               &fWVFSigma);
   fTree->Branch("event.WVFDet",             	&fWVFDet);
+  fTree->Branch("event.NFalseTriggers",		&fEventNFalseTriggers);
+  fTree->Branch("event.FalseTriggerPDGs",       &fEventFalseTriggerPDGs);
+  fTree->Branch("event.FalseTriggertimes",      &fEventFalseTriggerTimes);
+  fTree->Branch("event.FalseTriggerPlanes",     &fEventFalseTriggerPlanes);
 
   // MC Michel
   fTree->Branch("mcMichel.ID", 			&fMCMichelID);
@@ -788,6 +809,10 @@ void sbnd::AnalyseMichels::beginJob()
   fTree->Branch("mcMuon.StartY",		&fMCMuonStartY);
   fTree->Branch("mcMuon.StartZ",		&fMCMuonStartZ);
   fTree->Branch("mcMuon.Bendiness",		&fMCMuonBendiness);
+  fTree->Branch("mcMuon.Trigger",             &fMCMuonTrigger);
+  fTree->Branch("mcMuon.TriggerTime",         &fMCMuonTriggerTime);
+  fTree->Branch("mcMuon.TriggerPlanes",       &fMCMuonTriggerPlanes);
+  fTree->Branch("mcMuon.CRTPlane",		&fMCMuonCRTPlane);
 
   // Reco Muon
   fTree->Branch("recoMuon,NHits",		&fNRecoMuonHits);
@@ -882,6 +907,10 @@ void sbnd::AnalyseMichels::ResetVars()
   fWVFChannel.clear();
   fWVFBaseline.clear();
   fWVFSigma.clear();
+  fEventNFalseTriggers = 0;
+  fEventFalseTriggerPDGs.clear();
+  fEventFalseTriggerTimes.clear();
+  fEventFalseTriggerPlanes.clear();
   fWVFDet.clear();
   fRecoMichel = false;
   fIsTrack = false;
@@ -909,6 +938,9 @@ void sbnd::AnalyseMichels::ResetVars()
   fMCMuonEndX = 0;
   fMCMuonEndY = 0;
   fMCMuonEndZ = 0;
+  fMCMuonTrigger = false;
+  fMCMuonTriggerTime = -9999.;
+  fMCMuonTriggerPlanes.clear();
   fRecoMuonStartX = 0;
   fRecoMuonStartY = 0;
   fRecoMuonStartZ = 0;
@@ -920,6 +952,7 @@ void sbnd::AnalyseMichels::ResetVars()
   fNRecoMichelSpacePoints = 0;
   fRecoMichelNHitsPlane = {-1, -1, -1};
   fNMuons = 0;
+  fNCrossingMuons = 0;
   fRecoMuonIsPrimary = false;
   fRecoMuonMother = -1;
   fRecoMuonMichelDist = 0;
@@ -951,6 +984,7 @@ void sbnd::AnalyseMichels::ResetVars()
   fMCMuonStartX = 0;
   fMCMuonStartY = 1000;
   fMCMuonStartZ = 0;
+  fMCMuonCRTPlane = 10;
   fRecoMichelCloseProximity = -1;
   fRecoMichelNClusters = 0;
   fRecoMuonNClusters = 0;
@@ -1093,6 +1127,69 @@ void sbnd::AnalyseMichels::ResetVars()
   fWvfmsVec.clear();;
 }
 
+void sbnd::AnalyseMichels::getCoincidenceMatches(
+  const art::Event& e)
+{
+  // Load coincidences
+  art::Handle< std::vector<sbnd::Coincidence> > coincHandle;
+  std::vector< art::Ptr<sbnd::Coincidence> > coincVect;
+  if(e.getByLabel(fCoincidenceLabel, coincHandle))     // Make sure artHandle is from mo$
+    art::fill_ptr_vector(coincVect, coincHandle);
+
+  // Load MCParticles
+  art::Handle< std::vector<simb::MCParticle> > mctruthHandle;
+  std::vector< art::Ptr<simb::MCParticle> > mctruthVect;
+  if(e.getByLabel(fMCTruthLabel, mctruthHandle))     // Make sure artHandle is from mo$
+    art::fill_ptr_vector(mctruthVect, mctruthHandle);
+
+  // Find coincidences matching input planes
+  std::vector<sbnd::Coincidence> coinc_trigs;
+  for(unsigned i = 0; i < coincVect.size(); i++) {
+    auto coinc = *(coincVect)[i];
+    auto c_planes = coinc.Planes;
+    c_planes.erase(std::unique(c_planes.begin(), c_planes.end()), c_planes.end());
+    unsigned plane_count = 0;
+    bool veto = false;
+    for(auto plane : c_planes) {
+      if(fCoincidencePlanes[plane] == 0) {veto = true; break;}
+      else if(fCoincidencePlanes[plane] == 1) plane_count++;
+    }
+    if(!veto && plane_count == fPlaneCount) coinc_trigs.push_back(coinc);
+  }
+
+  // Remove coincidences associated with muons
+  std::vector<sbnd::Coincidence> muon_coincs, nonmuon_coincs;
+  std::vector<unsigned> muon_coinc_pos;
+  for(auto& mcp : mctruthVect) {
+    double start_x = mcp->Position().Vect().X();
+    double start_y = mcp->Position().Vect().Y();
+    double start_z = mcp->Position().Vect().Z();
+    if(abs(mcp->PdgCode()) == 13 && (abs(start_x) > 200. || abs(start_y) > 200. ||
+                                     start_z < 0. || start_z > 500.)
+                                 && (abs(mcp->EndX()) > 200. || abs(mcp->EndY()) > 200. ||
+                                     mcp->EndZ() < 0. || mcp->EndZ() > 500.)) fNCrossingMuons++;
+    if(abs(mcp->PdgCode()) != 13 || abs(mcp->EndX()) > 200. || abs(mcp->EndY()) > 200. || mcp->EndZ() < 0. || mcp->EndZ() > 500.) continue;
+    double muon_time = -9999.;
+    for(unsigned pos=0;pos<mcp->NumberTrajectoryPoints(); pos++) {
+      if((abs(mcp->Position(pos).X()) < 200.) &&
+         (abs(mcp->Position(pos).Y()) < 200.) &&
+         (mcp->Position(pos).Z() > 0.) &&
+         (mcp->Position(pos).Z() < 500.)) {
+        muon_time = mcp->T(pos) / 1000.; // us relative to beam spill
+        break;
+      }
+    }
+    for(unsigned coinc_pos=0; coinc_pos<coinc_trigs.size();coinc_pos++) {
+      auto coinc = coinc_trigs[coinc_pos];
+      if((muon_time < coinc.TimeStamp + 0.2 && muon_time > coinc.TimeStamp - 0.2)) muon_coinc_pos.push_back(coinc_pos);
+    }
+  }
+  for(unsigned i_coinc=0; i_coinc<coinc_trigs.size(); i_coinc++) {
+    if(std::find(muon_coinc_pos.begin(), muon_coinc_pos.end(), i_coinc) == muon_coinc_pos.end()) nonmuon_coincs.push_back(coinc_trigs[i_coinc]);
+    else muon_coincs.push_back(coinc_trigs[i_coinc]);
+  }
+  fEventNFalseTriggers = nonmuon_coincs.size();
+}
 
 void sbnd::AnalyseMichels::FillMC(
   const art::Event& e,
@@ -1114,6 +1211,10 @@ void sbnd::AnalyseMichels::FillMC(
       break;
     }
   }
+  std::vector<float> crt_dist(6);
+  crt_dist[0] = abs(fMCMuonStartY + 200.); crt_dist[1] = fMCMuonStartZ; crt_dist[2] = abs(500 - fMCMuonStartZ);
+  crt_dist[3] = abs(fMCMuonStartX + 200.); crt_dist[4] = 200 - fMCMuonStartX; crt_dist[5] = 200 - fMCMuonStartY;
+  fMCMuonCRTPlane = std::distance(crt_dist.begin(), min_element(crt_dist.begin(), crt_dist.end()));
   unsigned int i =  fNPoints/2;
   unsigned int j = fNPoints-1;
   unsigned int firstquart = fNPoints/4;
@@ -1187,6 +1288,19 @@ void sbnd::AnalyseMichels::FillMC(
     int hit_id = RecoUtils::TrueParticleID(clockData, hit);
     if(hit_id == fMCMichelID &&
        hit->View()==2) fMCMichelTotalADC += hit->SummedADC();
+  }
+  art::Handle< std::vector<sbnd::Coincidence> > coincHandle;
+  std::vector< art::Ptr<sbnd::Coincidence> > coincVect;
+  if(e.getByLabel(fCoincidenceLabel, coincHandle))     // Make sure artHandle is from mo$
+    art::fill_ptr_vector(coincVect, coincHandle);
+
+  for(auto& coinc : coincVect) {
+    if(fMCMuonTime < coinc->TimeStamp + 0.12 && fMCMuonTime > coinc->TimeStamp - 0.12) {
+      fMCMuonTrigger = true;
+      fMCMuonTriggerTime = coinc->TimeStamp;
+      fMCMuonTriggerPlanes = coinc->Planes;
+      break;
+    }
   }
 }
 
