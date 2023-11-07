@@ -1,4 +1,4 @@
-////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
 // Class:       pmtArtdaqFragmentProducer
 // Plugin Type: producer (Unknown Unknown)
 // File:        pmtArtdaqFragmentProducer_module.cc
@@ -84,6 +84,7 @@ private:
   std::string fInputModuleNameTrigger;
   int fBaseline; // baseline in simulation, default 8000 ADC (for expanding waveforms only, when not fully simulated)
   int fMultiplicityThreshold; // number of PMT pairs in hardware trigger to pass
+  double fBeamWindowStart;
   double fBeamWindowLength;
   uint32_t nChannelsFrag;
   uint32_t wfm_length; // ~10us, 2ns tick 
@@ -118,6 +119,7 @@ sbnd::trigger::pmtArtdaqFragmentProducer::pmtArtdaqFragmentProducer(fhicl::Param
   fInputModuleNameTrigger(p.get<std::string>("InputModuleNameTrigger")),
   fBaseline(p.get<int>("Baseline",8000)),
   fMultiplicityThreshold(p.get<int>("MultiplicityThreshold")),
+  fBeamWindowStart(p.get<double>("BeamWindowStart", 1510.)),
   fBeamWindowLength(p.get<double>("BeamWindowLength", 1.6)),
   nChannelsFrag(p.get<double>("nChannelsFrag", 15)),
   wfm_length(p.get<double>("WfmLength", 5120)),
@@ -264,8 +266,11 @@ void sbnd::trigger::pmtArtdaqFragmentProducer::produce(art::Event& e)
     }
   } // trigger handle loop
 
-  if (fVerbose) std::cout << "Number of PMT hardware triggers found: " << triggerIndex.size() << std::endl; 
-  
+  if (fVerbose) {
+    std::cout << "Number of PMT hardware triggers found: " << triggerIndex.size();
+    for(auto idx : triggerIndex) std::cout << " " << idx;
+    std::cout << std::endl; 
+  }  
   // fragments vector
   std::unique_ptr<std::vector<artdaq::Fragment>> vecFrag = std::make_unique<std::vector<artdaq::Fragment>>();
 
@@ -293,13 +298,17 @@ void sbnd::trigger::pmtArtdaqFragmentProducer::produce(art::Event& e)
   for (auto wvfIdx : triggerIndex) {
 
     // index in full waveform, 2ns tick
-    size_t trigIdx = wvfIdx*4;
+    size_t trigIdx = wvfIdx*4 - size_t(fBeamWindowStart*500);
+    if(fVerbose) std::cout << "Trigger Index: " << trigIdx << std::endl
+                           << "Wvfm Index: " << wvfIdx << std::endl;
     // size_t startIdx = trigIdx-500; // -1us
     size_t startIdx = abs(fMinStartTime)*1000/2 + trigIdx-500;
+    if(fVerbose) std::cout << "Start Index " << startIdx << std::endl;
 
     // determine and set timestamp for particular trigger
     // double triggerTime = fMinStartTime + wvfIdx*0.008; // in us
     double triggerTime = wvfIdx*0.008; // in us
+    if(fVerbose) std::cout << "Trigger time: " << triggerTime << std::endl;
     double timestampVal = 0.5 + (triggerTime*1e-6); // in seconds // std::time(nullptr); // current time
     metadata.timeStampSec = (uint32_t)timestampVal;
     metadata.timeStampNSec = (uint32_t)(timestampVal*1e9);

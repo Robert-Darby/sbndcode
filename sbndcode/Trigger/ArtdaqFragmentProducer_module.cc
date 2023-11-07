@@ -139,6 +139,7 @@ private:
   std::string fInputModuleNameTrigger;
   int fBaseline; // baseline in simulation, default 8000 ADC (for expanding waveforms only, when not fully simulated)
   int fMultiplicityThreshold; // number of PMT pairs in hardware trigger to pass
+  double fBeamWindowStart;
   double fBeamWindowLength;
   uint32_t nChannelsFrag;
   uint32_t wfm_length; // ~10us, 2ns tick
@@ -174,6 +175,7 @@ sbnd::trigger::ArtdaqFragmentProducer::ArtdaqFragmentProducer(fhicl::ParameterSe
   fInputModuleNameTrigger(p.get<std::string>("InputModuleNameTrigger")),
   fBaseline(p.get<int>("Baseline",8000)),
   fMultiplicityThreshold(p.get<int>("MultiplicityThreshold")),
+  fBeamWindowStart(p.get<double>("BeamWindowStart", 1510.)),
   fBeamWindowLength(p.get<double>("BeamWindowLength", 1.6)),
   nChannelsFrag(p.get<double>("nChannelsFrag", 15)),
   wfm_length(p.get<double>("WfmLength", 5120)),
@@ -537,7 +539,7 @@ void sbnd::trigger::ArtdaqFragmentProducer::produce(art::Event& e)
   for (auto wvfIdx : triggerIndex) {
 
     // index in full waveform, 2ns tick
-    size_t trigIdx = wvfIdx*4;
+    size_t trigIdx = wvfIdx*4 - size_t(fBeamWindowStart*500);
     // size_t startIdx = trigIdx-500; // -1us
     size_t startIdx = abs(fMinStartTime)*1000/2 + trigIdx-500;
 

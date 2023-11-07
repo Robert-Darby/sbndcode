@@ -5,9 +5,10 @@ pmtArtdaqFragmentProducer:
   module_type: "pmtArtdaqFragmentProducer"
   InputModuleNameWvfm: "opdaq"
   InputModuleNameTrigger: "pmttriggerproducer"
-  Baseline: 8000
-  MultiplicityThreshold: 10
-  BeamWindowLength: 1.8 # us, extended by 0.2us to account for delayed signals
+  Baseline: 14744
+  MultiplicityThreshold: 1
+  BeamWindowStart: 1510. #us
+  BeamWindowLength: 3020 # us, extended by 0.2us to account for delayed signals
   nChannelsFrag: 15
   WfmLength: 5120
   Verbose: true

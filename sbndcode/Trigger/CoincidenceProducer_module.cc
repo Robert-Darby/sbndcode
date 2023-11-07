@@ -219,7 +219,7 @@ void sbnd::CoincidenceProducer::getCAEN1730FragmentTimeStamp(
     ch_offset = (size_t)(i_ch * fWvfmLength);
     //--loop over waveform samples
     histname.str(std::string());
-    histname << "frag_" << e.id().event() << "_" << unsigned(timestamp) << "_" << fragId << "_" << i_ch + nChannels*fragId;
+    histname << "frag_" << e.id().event() << "_" << unsigned(timestamp) << "_" << i_ch + nChannels*fragId;
     TH1D *fraghist = tfs->make<TH1D>(histname.str().c_str(), "Fragment", fWvfmLength, 0, fWvfmLength);
     for(size_t i_t = 0; i_t < fWvfmLength; ++i_t) {
       value_ptr = data_begin + ch_offset + i_t; // pointer arithmetic
@@ -238,7 +238,7 @@ void sbnd::CoincidenceProducer::getMultiplicities(
     std::vector<unsigned> multProf(fWvfmLength, 0);
     auto& wvfmsVec = mult_it->second;
     for(auto& wvfm : wvfmsVec) {
-//      std::cout << "Max: " << *max_element(wvfm.begin(), wvfm.end()) << " Min: " << *min_element(wvfm.begin(), wvfm.end()) << std::endl;
+      std::cout << "Max: " << *max_element(wvfm.begin(), wvfm.end()) << " Min: " << *min_element(wvfm.begin(), wvfm.end()) << std::endl;
       for(unsigned i = 0; i < fWvfmLength; i++) {
         auto value = wvfm[i];
         if(value < fPMTThresholds[0]) multProf[i]++;
