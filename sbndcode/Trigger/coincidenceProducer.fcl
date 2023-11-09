@@ -6,8 +6,8 @@ coincidenceProducer:
   CoincidenceWindow:	0.24			# Time (us) after each CRT hit to check for coincidence
   CRTTriggerOffset:	1700000.
   CAENTriggerOffset:	0.5
-  PMTThresholds:	[14619., .14669]
-  Verbose:		true
+  PMTThresholds:	[14619., 14669.]
+  Verbose:		false
 }
 
 END_PROLOG
