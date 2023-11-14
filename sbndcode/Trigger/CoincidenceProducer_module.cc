@@ -69,11 +69,11 @@ private:
     const artdaq::Fragment &frag,
     std::multimap<double, unsigned>& fragTimeStamps,
     std::map<double, std::vector<std::vector<uint16_t>>>& fWvfmsMap);
-  std::map<double, unsigned> getMultiplicities(
+  std::map<int, unsigned> getMultiplicities(
     std::map<double, std::vector<std::vector<uint16_t>>>& fWvfmsMap);
   void getCoincidence(
     const std::multimap<double, unsigned>& fragTimeStamps,
-    const std::map<double, unsigned>& multMap,
+    std::map<int, unsigned>& multMap,
     std::unique_ptr<std::vector<sbnd::Coincidence>>& coincidence_v);
 
   // Tree params
@@ -197,7 +197,7 @@ void sbnd::CoincidenceProducer::getCAEN1730FragmentTimeStamp(
   // access timestamp
   double timestamp = (double)md->timeStampNSec;
   timestamp -= fCAENTriggerOffset*1e9; timestamp /= 1000; timestamp -= 1510.;
-  fragTimeStamps.insert(std::pair<float, size_t>(timestamp, 8));
+  fragTimeStamps.insert(std::pair<float, size_t>(timestamp, 7));
 
   // Add CEAN data to map
   // access fragment ID; index of fragment out of set of 8 fragments
@@ -231,57 +231,57 @@ void sbnd::CoincidenceProducer::getCAEN1730FragmentTimeStamp(
   } //--end loop channels
 }
 
-std::map<double, unsigned> sbnd::CoincidenceProducer::getMultiplicities(
+std::map<int, unsigned> sbnd::CoincidenceProducer::getMultiplicities(
   std::map<double, std::vector<std::vector<uint16_t>>>& fWvfmsMap)
 {
-  std::map<double, unsigned> multMap; multMap[-9999.] = 9999;
+  std::map<int, unsigned> multMap; multMap[-9999] = 9999;
   for(auto mult_it = fWvfmsMap.begin(); mult_it != fWvfmsMap.end(); mult_it++) {
     std::vector<unsigned> multProf(fWvfmLength, 0);
     auto& wvfmsVec = mult_it->second;
-    for(unsigned i_ch = 0; i_ch<wvfmsVec.size(); i_ch++) {
+    for(unsigned i_ch=0; i_ch<wvfmsVec.size(); i_ch++) {
       auto wvfm = wvfmsVec[i_ch];
       std::string opdetType = pdMap.pdType(i_ch);
       double threshold = (opdetType=="pmt_uncoated") ? fPMTThresholds[0] : fPMTThresholds[1];
       for(unsigned i = 0; i < fWvfmLength; i++) {
         auto value = wvfm[i];
-        if(value < threshold) multProf[i] += 1;
+        if(value < threshold) multProf[i]++;
       } // Loop over individual waveform
     } // Loop over all waveforms
-    multMap[mult_it->first] = *max_element(multProf.begin(), multProf.end());
+    multMap.insert(std::pair<int, unsigned>(int(mult_it->first), *max_element(multProf.begin(), multProf.end())));
   } // Loop over fWvfmsMap
-  for(auto mult_it = multMap.begin(); mult_it != multMap.end(); mult_it++) {
-    std::cout << "Time: " << mult_it->first << " Multiplicity: " << mult_it->second << std::endl;
-  }
+//  for(auto mult_it = multMap.begin(); mult_it != multMap.end(); mult_it++) {
+//    std::cout << "Time: " << mult_it->first << " Multiplicity: " << mult_it->second << std::endl;
+//  }
   return multMap;
 }
 
 void sbnd::CoincidenceProducer::getCoincidence(
   const std::multimap<double, unsigned>& fragTimeStamps,
-  const std::map<double, unsigned>& multMap,
+  std::map<int, unsigned>& multMap,
   std::unique_ptr<std::vector<sbnd::Coincidence>>& coincidence_v)
 {
+  for(auto it=multMap.begin(); it!=multMap.end();it++)
+    std::cout << "Time: " << it->first << " Multiplicity " << it->second << std::endl;
   // Loop over chronological CRT/PDS tiggers
   for(auto it = fragTimeStamps.begin(); it != fragTimeStamps.end(); it++) {
-    if(unsigned(std::distance(fragTimeStamps.begin(), it)) >= fragTimeStamps.size()) break;
-    if(fVerbose) std::cout << "Plane: " << it->second << " Time: " << it->first << std::endl;
-    double pmt_time = (it->second==8) ? it->first : -9999.;
+    int pmt_time = (it->second==7) ? int(it->first) : -9999;
     std::vector<unsigned> coinc_frags; coinc_frags.push_back(it->second);
     std::vector<bool> frag_present(8, false);
     frag_present[it->second] = true;
     // Loop over all triggers in specified coincidence window
     float window_end = it->first + fCoincidenceWindow;
     int frags_in_window = 0;
-    auto jt = it; std::advance(jt, 1);
-    for(; jt != fragTimeStamps.end(); jt++) {
+    for(auto jt = it; jt != fragTimeStamps.end(); jt++) {
       if(jt->first > window_end) break;
       frags_in_window++;
       if(jt->second == it->second) continue;
-      if(jt->second==8) pmt_time = jt->first;
+      if(jt->second==7) pmt_time = int(jt->first);
       coinc_frags.push_back(jt->second);
     }
     if(coinc_frags.size() > 1) {
       std::sort(coinc_frags.begin(), coinc_frags.end());
-      auto multiplicity = multMap.at(pmt_time);
+      unsigned multiplicity = multMap[pmt_time];
+      std::cout << "Time: " << it->first << " PMT Time: " << pmt_time << " Multiplicity: " << multiplicity << std::endl;
       coincidence_v->emplace_back(sbnd::Coincidence(it->first, coinc_frags, multiplicity));
       std::advance(it, frags_in_window);
     }
