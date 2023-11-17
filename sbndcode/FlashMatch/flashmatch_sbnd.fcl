@@ -16,6 +16,8 @@ sbnd_simple_flashmatch:{
   FlashFindingTimeEnd:    100.   # us # TODO: tune
   FlashStart:              -0.02 # us, wrt flash time
   FlashEnd:                 0.08 # us, wrt flash time
+  ReadoutDelay: 0.135
+  CorrectLightPropagationTime: true
   ForceConcurrence: true
   CorrectDriftDistance: true
   InputFileName: "FlashMatch/fm_metrics_sbnd.root"
@@ -23,6 +25,8 @@ sbnd_simple_flashmatch:{
   SelectNeutrino: false # it's too buggy to set 'false'
   MakeTree: false
   StoreMCInfo: false
+  UseScore: false	# true = match charge/flash pairs with lowest score, false = match pairs with closest barycenters
+  YZDist: false		# true = only use Y, Z coords when matching barycenters, flase = use X, Y, Z coords when matching barycenters
   # TODO: tune below
   MinHitQ: 0.
   MinSpacePointQ: 0.
