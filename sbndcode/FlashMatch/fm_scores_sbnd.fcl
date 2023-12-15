@@ -24,17 +24,60 @@ source:{
 
 physics: {
   producers: {
+  # Score, poly correction
     fmatch: @local::sbnd_simple_flashmatch		# For PMT SimpleFlashes
     fmatchara: @local::sbnd_simple_flashmatch_ara	# For XARAPUCA SimpleFlashes
     fmatchop: @local::sbnd_simple_flashmatch_op       # For PMT OpFlashes
     fmatchopara: @local::sbnd_simple_flashmatch_opara       # For XARAPUCA OpFlashes
+  # Score threshold correction
+    fmatchthreshold: @local::sbnd_simple_flashmatch              # For PMT SimpleFlashes
+    fmatchthresholdara: @local::sbnd_simple_flashmatch_ara       # For XARAPUCA SimpleFlashes
+    fmatchthresholdop: @local::sbnd_simple_flashmatch_op       # For PMT OpFlashes
+    fmatchthresholdopara: @local::sbnd_simple_flashmatch_opara       # For XARAPUCA OpFlashes
+  # Barycenter dxyz, threshold
+    fmatchbaryxyz: @local::sbnd_simple_flashmatch              # For PMT SimpleFlashes
+    fmatchbaryxyzara: @local::sbnd_simple_flashmatch_ara       # For XARAPUCA SimpleFlashes
+    fmatchbaryxyzop: @local::sbnd_simple_flashmatch_op       # For PMT OpFlashes
+    fmatchbaryxyzopara: @local::sbnd_simple_flashmatch_opara       # For XARAPUCA OpFlashes
+  # Barycenter dyz, threshold
+    fmatchbaryyz: @local::sbnd_simple_flashmatch              # For PMT SimpleFlashes
+    fmatchbaryyzara: @local::sbnd_simple_flashmatch_ara       # For XARAPUCA SimpleFlashes
+    fmatchbaryyzop: @local::sbnd_simple_flashmatch_op       # For PMT OpFlashes
+    fmatchbaryyzopara: @local::sbnd_simple_flashmatch_opara       # For XARAPUCA OpFlashes
+  # Bary xyz, poly
+    fmatchpolybaryxyz: @local::sbnd_simple_flashmatch              # For PMT SimpleFlashes
+    fmatchpolybaryxyzara: @local::sbnd_simple_flashmatch_ara       # For XARAPUCA SimpleFlashes
+    fmatchpolybaryxyzop: @local::sbnd_simple_flashmatch_op       # For PMT OpFlashes
+    fmatchpolybaryxyzopara: @local::sbnd_simple_flashmatch_opara       # For XARAPUCA OpFlashes
+  # Bary yz, poly
+    fmatchpolybaryyz: @local::sbnd_simple_flashmatch              # For PMT SimpleFlashes
+    fmatchpolybaryyzara: @local::sbnd_simple_flashmatch_ara       # For XARAPUCA SimpleFlashes
+    fmatchpolybaryyzop: @local::sbnd_simple_flashmatch_op       # For PMT OpFlashes
+    fmatchpolybaryyzopara: @local::sbnd_simple_flashmatch_opara       # For XARAPUCA OpFlashes
+  # MC Cheating
+    fmatchmc: @local::sbnd_simple_flashmatch              # For PMT SimpleFlashes
+    fmatchmcara: @local::sbnd_simple_flashmatch_ara       # For XARAPUCA SimpleFlashes
+    fmatchmcop: @local::sbnd_simple_flashmatch_op       # For PMT OpFlashes
+    fmatchmcopara: @local::sbnd_simple_flashmatch_opara       # For XARAPUCA OpFlashes
+
   }
 
-  reco: [fmatch, fmatchop, fmatchara, fmatchopara]
-  stream: [out, out, out, out]
+  reco: [fmatch, fmatchop, fmatchara, fmatchopara,
+         fmatchthreshold, fmatchthresholdop, fmatchthresholdara, fmatchthresholdopara,
+         fmatchbaryxyz, fmatchbaryxyzop, fmatchbaryxyzara, fmatchbaryxyzopara,
+         fmatchbaryyz, fmatchbaryyzop, fmatchbaryyzara, fmatchbaryyzopara,
+#         fmatchpolybaryxyz, fmatchpolybaryxyzop, fmatchpolybaryxyzara, fmatchpolybaryxyzopara,
+#         fmatchpolybaryyz, fmatchpolybaryyzop, fmatchpolybaryyzara, fmatchpolybaryyzopara,
+         fmatchmc, fmatchmcop, fmatchmcara, fmatchmcopara]
+  stream: [out, out, out, out,
+           out, out, out, out,
+           out, out, out, out,
+           out, out, out, out,
+#           out, out, out, out,
+#           out, out, out, out,
+           out, out, out, out]
   end_paths: ['0:stream', '0:stream', '0:stream', '0:stream']
 }
-
 outputs: {
   out: {
     @table::sbnd_rootoutput # inherit shared settings

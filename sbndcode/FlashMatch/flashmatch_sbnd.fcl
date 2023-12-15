@@ -25,6 +25,7 @@ sbnd_simple_flashmatch:{
   InputFileName: "FlashMatch/fm_metrics_sbnd.root"
   NoAvailableMetrics: false
   SelectNeutrino: true # it's too buggy to set 'false'
+  SortOpFlashIntegral: false	# True: Select OpFlashes by total PE count. False: Select OpFlashes by PE peak amplitude (same as SimpleFlashes)
   UseOpCoords: true
   MakeTree: true # false
   StoreMCInfo: true # false
