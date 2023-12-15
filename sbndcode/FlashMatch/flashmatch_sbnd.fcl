@@ -14,8 +14,8 @@ sbnd_simple_flashmatch:{
   OpFlashHitProducer: ["opflashtpc0", "opflashtpc1"]
   BeamSpillTimeStart:       0.1 # us, with some tolerance # TODO: update this when time gets zeroed
   BeamSpillTimeEnd:         1.8  # us, with some tolerance # TODO: update this when time gets zeroed
-  FlashFindingTimeStart: -100.   # us # TODO: tune
-  FlashFindingTimeEnd:    100.   # us # TODO: tune
+  FlashFindingTimeStart: -1500.   # us # TODO: tune
+  FlashFindingTimeEnd:    1500.   # us # TODO: tune
   FlashStart:              -0.02 # us, wrt flash time
   FlashEnd:                 0.08 # us, wrt flash time
   ReadoutDelay: 0.135
@@ -24,10 +24,11 @@ sbnd_simple_flashmatch:{
   CorrectDriftDistance: true
   InputFileName: "FlashMatch/fm_metrics_sbnd.root"
   NoAvailableMetrics: false
-  SelectNeutrino: false # it's too buggy to set 'false'
-  MakeTree: false
-  StoreMCInfo: false
-  UseScore: false	# true = match charge/flash pairs with lowest score, false = match pairs with closest barycenters
+  SelectNeutrino: true # it's too buggy to set 'false'
+  UseOpCoords: true
+  MakeTree: true # false
+  StoreMCInfo: true # false
+  UseScore: true	# true = match charge/flash pairs with lowest score, false = match pairs with closest barycenters
   YZDist: false		# true = only use Y, Z coords when matching barycenters, flase = use X, Y, Z coords when matching barycenters
   # TODO: tune below
   MinHitQ: 0.
@@ -35,15 +36,16 @@ sbnd_simple_flashmatch:{
   MinParticleQ: 0.
   MinSliceQ: 0.
   OpHitTime: "PeakTime" # TODO: test and change to RiseTime or StartTime once they become available
-  MinInTimeFlashes: 2
-  MaxFlashes: 7
+  FindAllFlashes: false	# Finds all flashes in search window. Overrides MaxFlashes. CAUTION: Very slow for SimpleFlashes
+  MinInTimeFlashes: 1
+  MaxFlashes: 30
   MinOpHPE: 0.
   MinFlashPE: 10.
   FlashPEFraction: 0.8
   PlaneList: [0, 1, 2]  # Choose which wire planes to use (0, 1, 2 = U, V, W)
   ChargeToNPhotonsShower: 1.0
   ChargeToNPhotonsTrack: 1.0
-  UseGeoThreshold: true
+  UseGeoThreshold: false
   FlashGeoConfig: @local::FlashGeoThreshold
   # TODO: tune above
 
