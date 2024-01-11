@@ -73,9 +73,9 @@ physics: {
            out, out, out, out,
            out, out, out, out,
            out, out, out, out,
-#           out, out, out, out,
-#           out, out, out, out,
            out, out, out, out]
+#           out, out, out, out,
+#          out, out, out, out]
   end_paths: ['0:stream', '0:stream', '0:stream', '0:stream']
 }
 outputs: {

@@ -1,5 +1,4 @@
 #include "sbnd_flashgeoalgo.fcl"
-
 BEGIN_PROLOG #comment to run generate_simple_weighted_template.py
 
 sbnd_simple_flashmatch:{
