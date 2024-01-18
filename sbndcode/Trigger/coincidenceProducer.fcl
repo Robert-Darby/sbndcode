@@ -7,7 +7,7 @@ coincidenceProducer:
   CRTTriggerOffset:	1700000.
   CAENTriggerOffset:	0.5
   PMTThresholds:	[14619., 14669.]
-  Verbose:		false
+  Verbose:		true
 }
 
 END_PROLOG

@@ -26,7 +26,7 @@ analyseMichels:
   TrackCaloLabel:	"pandoraCalo"
   OpHitLabel:		"ophitpmt"
   CRTHitLabel:		"crthit"
-  CoincidencePlanes:	[2, 2, 2, 2, 2, 2, 2]   # [bot, left, right, upstream, downstream, top low, top high]
+  CoincidencePlanes:	[0, 2, 2, 2, 2, 2, 2, 1]   # [bot, left, right, upstream, downstream, top low, top high, PMT]
   CaloSkimLabel:	"caloskimCalorimetry"
   UseWPlaneOnly:	0			# 0 = Use all planes, 1 = use only collection plane
   SliceLabel:		"pandora"

@@ -199,7 +199,8 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   std::vector<int> fClusterID;
   std::vector<std::string> fClusterPlane;
   int fNMuons;
-  int fNCrossingMuons;
+  unsigned fNCrossingMuons;
+  unsigned fNCrossFalseTriggers;
   float fRecoMuonMichelDist;
   std::vector<bool> fPFPIsPrimary;
   std::vector<int> fPFPMother;
@@ -376,6 +377,7 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   float fMCMuonEndX;
   float fMCMuonEndY;
   float fMCMuonEndZ;
+  float fMCMuonLength;
   float fMCMuonEndEnergy;
   float fMCMuonEndPx;
   float fMCMuonEndPy;
@@ -386,6 +388,7 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   float fMCMuonBendiness;
   bool fMCMuonTrigger;
   double fMCMuonTriggerTime;
+  unsigned fMCMuonTriggerMultiplicity;
   std::vector<unsigned> fMCMuonTriggerPlanes;
   unsigned fMCMuonCRTPlane;
 
@@ -435,6 +438,16 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   // Temporary variables
   int countpfps;
   std::string lastchar;
+
+  // Coincidence Tree
+  TTree* fCoincTree;
+  double fCoincTime;
+  unsigned fCoincMult;
+  bool fCoincTopTrig, fCoincTopIncTrig, fCoincAllTrig, fCoincMuon;
+  std::vector<unsigned> fCoincPlanes;
+
+  const std::set<unsigned> kTopPlanes = {5, 6, 7};
+  const std::set<unsigned> kAllPlanes = {1, 2, 3, 4, 5, 6, 7};
 
   // Define input labels
   const std::string fPFParticleLabel;
@@ -634,6 +647,7 @@ void sbnd::AnalyseMichels::beginJob()
   fTree->Branch("event.ClusterPlane",		&fClusterPlane);
   fTree->Branch("event.NRecoMuons",		&fNMuons);
   fTree->Branch("event.NCrossingMuons",		&fNCrossingMuons);
+  fTree->Branch("event.NCrossFalseTriggers",    &fNCrossFalseTriggers);
   fTree->Branch("event.RecoMuonMichelDist",	&fRecoMuonMichelDist);
   fTree->Branch("event.PFPIsPrimary",		&fPFPIsPrimary);
   fTree->Branch("event.PFPMother",		&fPFPMother);
@@ -801,6 +815,7 @@ void sbnd::AnalyseMichels::beginJob()
   fTree->Branch("mcMuon.EndX",			&fMCMuonEndX);
   fTree->Branch("mcMuon.EndY",			&fMCMuonEndY);
   fTree->Branch("mcMuon.EndZ",			&fMCMuonEndZ);
+  fTree->Branch("mcMuon.Length",		&fMCMuonLength);
   fTree->Branch("mcMuon.EndEnergy",		&fMCMuonEndEnergy);
   fTree->Branch("mcMuon.EndPx",			&fMCMuonEndPx);
   fTree->Branch("mcMuon.EndPy",			&fMCMuonEndPy);
@@ -811,6 +826,7 @@ void sbnd::AnalyseMichels::beginJob()
   fTree->Branch("mcMuon.Bendiness",		&fMCMuonBendiness);
   fTree->Branch("mcMuon.Trigger",             &fMCMuonTrigger);
   fTree->Branch("mcMuon.TriggerTime",         &fMCMuonTriggerTime);
+  fTree->Branch("mcMuon.TriggerMultiplicity", &fMCMuonTriggerMultiplicity);
   fTree->Branch("mcMuon.TriggerPlanes",       &fMCMuonTriggerPlanes);
   fTree->Branch("mcMuon.CRTPlane",		&fMCMuonCRTPlane);
 
@@ -858,6 +874,19 @@ void sbnd::AnalyseMichels::beginJob()
 
   fTree->Branch("countpfpf",				&countpfps);
   fTree->Branch("lastchar",				&lastchar);
+
+  fCoincTree = tfs->make<TTree>("coinc_tree", "Output Tree");
+
+  fCoincTree->Branch("run",                     &fEventRun);
+  fCoincTree->Branch("sub",                     &fEventSub);
+  fCoincTree->Branch("evt",                     &fEventID);
+  fCoincTree->Branch("time",			&fCoincTime);
+  fCoincTree->Branch("mult",			&fCoincMult);
+  fCoincTree->Branch("planes",			&fCoincPlanes);
+  fCoincTree->Branch("muon",			&fCoincMuon);
+  fCoincTree->Branch("toptrig",			&fCoincTopTrig);
+  fCoincTree->Branch("topinctrig",		&fCoincTopIncTrig);
+  fCoincTree->Branch("alltrig",			&fCoincAllTrig);
 
   fMCMichelEnergyHist = tfs->make<TH1D>("mcMichelEnergyHist", "Energy of MC Michels; Energy; Events", 40, 2, 1);
   fMCMuonEnergyHist = tfs->make<TH1D>("mcMuonEnergyHist", "Energy of MC muons; Energy; Events", 40, 2, 1);
@@ -907,7 +936,6 @@ void sbnd::AnalyseMichels::ResetVars()
   fWVFChannel.clear();
   fWVFBaseline.clear();
   fWVFSigma.clear();
-  fEventNFalseTriggers = 0;
   fEventFalseTriggerPDGs.clear();
   fEventFalseTriggerTimes.clear();
   fEventFalseTriggerPlanes.clear();
@@ -938,8 +966,10 @@ void sbnd::AnalyseMichels::ResetVars()
   fMCMuonEndX = 0;
   fMCMuonEndY = 0;
   fMCMuonEndZ = 0;
+  fMCMuonLength = -9999.;
   fMCMuonTrigger = false;
   fMCMuonTriggerTime = -9999.;
+  fMCMuonTriggerMultiplicity = 0;
   fMCMuonTriggerPlanes.clear();
   fRecoMuonStartX = 0;
   fRecoMuonStartY = 0;
@@ -952,7 +982,6 @@ void sbnd::AnalyseMichels::ResetVars()
   fNRecoMichelSpacePoints = 0;
   fRecoMichelNHitsPlane = {-1, -1, -1};
   fNMuons = 0;
-  fNCrossingMuons = 0;
   fRecoMuonIsPrimary = false;
   fRecoMuonMother = -1;
   fRecoMuonMichelDist = 0;
@@ -1130,6 +1159,8 @@ void sbnd::AnalyseMichels::ResetVars()
 void sbnd::AnalyseMichels::getCoincidenceMatches(
   const art::Event& e)
 {
+  fNCrossingMuons = 0;
+  fNCrossFalseTriggers = 0;
   // Load coincidences
   art::Handle< std::vector<sbnd::Coincidence> > coincHandle;
   std::vector< art::Ptr<sbnd::Coincidence> > coincVect;
@@ -1157,37 +1188,64 @@ void sbnd::AnalyseMichels::getCoincidenceMatches(
     if(!veto && plane_count == fPlaneCount) coinc_trigs.push_back(coinc);
   }
 
-  // Remove coincidences associated with muons
+
+  // Remove coincidences associated with stopping muons
   std::vector<sbnd::Coincidence> muon_coincs, nonmuon_coincs;
-  std::vector<unsigned> muon_coinc_pos;
+  std::vector<double> cross_times;
   for(auto& mcp : mctruthVect) {
     double start_x = mcp->Position().Vect().X();
     double start_y = mcp->Position().Vect().Y();
     double start_z = mcp->Position().Vect().Z();
-    if(abs(mcp->PdgCode()) == 13 && (abs(start_x) > 200. || abs(start_y) > 200. ||
-                                     start_z < 0. || start_z > 500.)
-                                 && (abs(mcp->EndX()) > 200. || abs(mcp->EndY()) > 200. ||
-                                     mcp->EndZ() < 0. || mcp->EndZ() > 500.)) fNCrossingMuons++;
-    if(abs(mcp->PdgCode()) != 13 || abs(mcp->EndX()) > 200. || abs(mcp->EndY()) > 200. || mcp->EndZ() < 0. || mcp->EndZ() > 500.) continue;
+    bool inside_tpc = false;
     double muon_time = -9999.;
     for(unsigned pos=0;pos<mcp->NumberTrajectoryPoints(); pos++) {
       if((abs(mcp->Position(pos).X()) < 200.) &&
          (abs(mcp->Position(pos).Y()) < 200.) &&
          (mcp->Position(pos).Z() > 0.) &&
          (mcp->Position(pos).Z() < 500.)) {
+        inside_tpc = true;
         muon_time = mcp->T(pos) / 1000.; // us relative to beam spill
         break;
       }
     }
-    for(unsigned coinc_pos=0; coinc_pos<coinc_trigs.size();coinc_pos++) {
-      auto coinc = coinc_trigs[coinc_pos];
-      if((muon_time < coinc.TimeStamp + 0.2 && muon_time > coinc.TimeStamp - 0.2)) muon_coinc_pos.push_back(coinc_pos);
+    if(abs(mcp->PdgCode()) == 13 && inside_tpc &&
+       (abs(start_x) > 200. || abs(start_y) > 200. ||
+            start_z < 0. || start_z > 500.) &&
+       (abs(mcp->EndX()) > 200. || abs(mcp->EndY()) > 200. ||
+            mcp->EndZ() < 0. || mcp->EndZ() > 500.)) cross_times.push_back(muon_time);
+    if(abs(mcp->PdgCode()) != 13 || abs(mcp->EndX()) > 200. || abs(mcp->EndY()) > 200. || mcp->EndZ() < 0. || mcp->EndZ() > 500.) continue;
+    for(auto& coinc : coinc_trigs) {
+      if((muon_time < coinc.TimeStamp + 0.2 && muon_time > coinc.TimeStamp - 0.2)) muon_coincs.push_back(coinc);
+      else {nonmuon_coincs.push_back(coinc);}
     }
   }
-  for(unsigned i_coinc=0; i_coinc<coinc_trigs.size(); i_coinc++) {
-    if(std::find(muon_coinc_pos.begin(), muon_coinc_pos.end(), i_coinc) == muon_coinc_pos.end()) nonmuon_coincs.push_back(coinc_trigs[i_coinc]);
-    else muon_coincs.push_back(coinc_trigs[i_coinc]);
+  for(auto& coinc : muon_coincs) {
+    fCoincTime = coinc.TimeStamp;
+    fCoincMuon = true;
+    fCoincPlanes = coinc.Planes;
+    fCoincMult = coinc.Multiplicity;
+    std::set<unsigned> coinc_set(fCoincPlanes.begin(), fCoincPlanes.end());  
+    fCoincTopTrig = (coinc_set==kTopPlanes) ? true : false;
+    fCoincTopIncTrig = (std::includes(kTopPlanes.begin(), kTopPlanes.end(), coinc_set.begin(), coinc_set.end())) ? true : false;
+    fCoincAllTrig = (std::includes(kAllPlanes.begin(), kAllPlanes.end(), coinc_set.begin(), coinc_set.end())) ? true : false;
+    fCoincTree->Fill();
   }
+
+  for(auto& coinc : nonmuon_coincs) {
+    for(auto t : cross_times) {
+      if(t < coinc.TimeStamp + 0.2 && t < coinc.TimeStamp - 0.2) fNCrossFalseTriggers++;
+    }
+    fCoincTime = coinc.TimeStamp;
+    fCoincMuon = false;
+    fCoincPlanes = coinc.Planes;
+    fCoincMult = coinc.Multiplicity;
+    std::set<unsigned> coinc_set(fCoincPlanes.begin(), fCoincPlanes.end());
+    fCoincTopTrig = (coinc_set==kTopPlanes) ? true : false;
+    fCoincTopIncTrig = (std::includes(kTopPlanes.begin(), kTopPlanes.end(), coinc_set.begin(), coinc_set.end())) ? true : false;
+    fCoincAllTrig = (std::includes(kAllPlanes.begin(), kAllPlanes.end(), coinc_set.begin(), coinc_set.end())) ? true : false;
+    fCoincTree->Fill();
+  }
+  fNCrossingMuons = cross_times.size();
   fEventNFalseTriggers = nonmuon_coincs.size();
 }
 
@@ -1199,6 +1257,7 @@ void sbnd::AnalyseMichels::FillMC(
   fMCMuonPDG = mcp->PdgCode();
   fMCMuonG4ID = mcp->TrackId();
   fNPoints = mcp->NumberTrajectoryPoints();
+  unsigned start_pos;
   for(int pos=0;pos<fNPoints;pos++) {
     if((abs(mcp->Position(pos).X()) < 200.) &&
        (abs(mcp->Position(pos).Y()) < 200.) &&
@@ -1208,6 +1267,8 @@ void sbnd::AnalyseMichels::FillMC(
       fMCMuonStartX = mcp->Position(pos).X();
       fMCMuonStartY = mcp->Position(pos).Y();
       fMCMuonStartZ = mcp->Position(pos).Z();
+      fMCMuonEnergy = mcp->E(pos);
+      start_pos = pos;
       break;
     }
   }
@@ -1221,7 +1282,6 @@ void sbnd::AnalyseMichels::FillMC(
   unsigned int lastquart = 3*fNPoints/4;
   TVector3 tempvect = mcp->Position(0).Vect();
   TVector3 mcmuonend = mcp->EndPosition().Vect();
-
   TVector3 vect1 = (mcp->Position(firstquart).Vect() - mcp->Position(0).Vect()).Unit();
   TVector3 vect2 = (mcp->Position(i).Vect() - mcp->Position(firstquart).Vect()).Unit();
   TVector3 vect3 = (mcp->Position(lastquart).Vect() - mcp->Position(i).Vect()).Unit();
@@ -1229,7 +1289,9 @@ void sbnd::AnalyseMichels::FillMC(
   fMCMuonBendiness = (vect1.Dot(vect2) + vect2.Dot(vect3) + vect3.Dot(vect4))/3;
 
   *fMCMuonVect = mcp->Position(i).Vect() - mcp->Position(j).Vect();
+  TVector3 fMCMuonStart = mcp->Position(start_pos).Vect();
   TVector3 fMCMuonEndVect = mcp->Position(j).Vect();
+  fMCMuonLength = (fMCMuonEndVect - fMCMuonStart).Mag();
   fMCMuonEndX = mcp->EndX();
   fMCMuonEndY = mcp->EndY();
   fMCMuonEndZ = mcp->EndZ();
@@ -1239,7 +1301,6 @@ void sbnd::AnalyseMichels::FillMC(
   rotateVector(fMCMuonVect);
   fMCMuonPhi = (fMCMuonVect->Theta()) * 180 / M_PI -90;
   rotateVector(fMCMuonVect);
-  fMCMuonEnergy = mcp->E() * 1000;				// Scale energy to MeV
   fMCMuonEndEnergy = mcp->EndE() * 1000;
   fMCMuonEnergyHist->Fill(fMCMuonEnergy);
   fMCMuonThetaHist->Fill(fMCMuonTheta);
@@ -1298,7 +1359,9 @@ void sbnd::AnalyseMichels::FillMC(
     if(fMCMuonTime < coinc->TimeStamp + 0.12 && fMCMuonTime > coinc->TimeStamp - 0.12) {
       fMCMuonTrigger = true;
       fMCMuonTriggerTime = coinc->TimeStamp;
+      fMCMuonTriggerMultiplicity = coinc->Multiplicity;
       fMCMuonTriggerPlanes = coinc->Planes;
+      fMCMuonTriggerPlanes.erase(std::unique(fMCMuonTriggerPlanes.begin(), fMCMuonTriggerPlanes.end()), fMCMuonTriggerPlanes.end());
       break;
     }
   }

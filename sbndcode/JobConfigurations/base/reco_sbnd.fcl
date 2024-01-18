@@ -40,6 +40,8 @@
 #include "particleid_sbnd.fcl"
 #include "rootoutput_sbnd.fcl"
 
+#include "coincidenceProducer.fcl"
+
 #include "crtsimhitproducer_sbnd.fcl"
 ##include "crttzeroproducer_sbnd.fcl"
 #include "crttrackproducer_sbnd.fcl"
@@ -115,6 +117,9 @@ physics:
   gaushit:             @local::sbnd_gaushitfinder
   fasthit:             @local::sbnd_fasthitfinder
 #  rffhit:              @local::sbnd_rffhitfinder
+
+  #coincidence
+  coincidence: 		@local::coincidenceProducer
 
   ### Truth-matich for hits
   gaushitTruthMatch:   @local::standard_mcparticlehitmatching
@@ -200,7 +205,8 @@ physics:
          , fasthit
    #         , linecluster
          , gaushitTruthMatch
-   #      , rffhit
+	 , coincidence 
+  #      , rffhit
    #      , corner
    #      , fuzzycluster
  ]
