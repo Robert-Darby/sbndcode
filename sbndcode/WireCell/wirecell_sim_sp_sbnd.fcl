@@ -40,6 +40,8 @@ services:
   FileCatalogMetadata: @local::sbnd_file_catalog_mc
   #AuxDetExptGeoHelperInterface: { service_provider: "sbndcode/CRT/CRTGeometryHelper" }
   #AuxDetGeometry: { @table::sbnd_geo_source }
+  message:      { debugModules: ["*"] destinations: { debugmsg:{type: "cout" threshold: "INFO"} } } #added Ewerton 2023-06-30
+  TimeTracker:  { printSummary: true } #added Ewerton 2023-06-30
 }
 
 
@@ -167,6 +169,3 @@ outputs:
                     ]
   }
 }
-
-
-
