@@ -198,6 +198,7 @@ void sbnd::CoincidenceProducer::getCAEN1730FragmentTimeStamp(
   double timestamp = (double)md->timeStampNSec;
   timestamp -= fCAENTriggerOffset*1e9; timestamp /= 1000; timestamp -= 1510.;
   fragTimeStamps.insert(std::pair<float, size_t>(timestamp, 7));
+  if(timestamp > 0) return;
 
   // Add CEAN data to map
   // access fragment ID; index of fragment out of set of 8 fragments
@@ -220,7 +221,8 @@ void sbnd::CoincidenceProducer::getCAEN1730FragmentTimeStamp(
     ch_offset = (size_t)(i_ch * fWvfmLength);
     //--loop over waveform samples
     histname.str(std::string());
-    histname << "frag_" << e.id().event() << "_" << unsigned(timestamp) << "_" << i_ch + nChannels*fragId;
+    std::string prefix = (timestamp < 0) ? "m" : "";
+    histname << "frag_" << e.id().event() << "_" << prefix << abs(int(timestamp)) << "_" << i_ch + nChannels*fragId;
     TH1D *fraghist = tfs->make<TH1D>(histname.str().c_str(), "Fragment", fWvfmLength, 0, fWvfmLength);
     for(size_t i_t = 0; i_t < fWvfmLength; ++i_t) {
       value_ptr = data_begin + ch_offset + i_t; // pointer arithmetic

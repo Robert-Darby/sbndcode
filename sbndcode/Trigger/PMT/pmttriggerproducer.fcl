@@ -21,7 +21,7 @@ pmtTriggerProducer:
   PairLogic: "OR" #logic for pairing PMTs, option are "OR" or "AND"
   WindowStart: -1510. #us, window for pmt trigger time start
   WindowEnd: 1510. #us, window for pmt trigger time end
-  SaveHists: false #save hists for all steps (raw, digital, paired, etc.)
+  SaveHists: true #save hists for all steps (raw, digital, paired, etc.)
   EvHists: [1] #if fSaveHists=true, then what events all hists are saved for. if too many hists are saved, may have memory issues; try saving less events.
   Verbose: false
 

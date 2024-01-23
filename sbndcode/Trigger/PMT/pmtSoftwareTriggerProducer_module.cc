@@ -328,6 +328,7 @@ void sbnd::trigger::pmtSoftwareTriggerProducer::produce(art::Event& e)
       // quick estimate prompt and preliminary light, assuming sampling rate of 500 MHz (2 ns per bin)
       if (fCalculatePEMetrics){
         double baseline = pmtInfo.baseline;
+        std::cout << "Baseline: " << baseline << std::endl;
         auto prompt_window = std::vector<uint16_t>(wvfm.begin()+500, wvfm.begin()+1000);
         auto prelim_window = std::vector<uint16_t>(wvfm.begin()+beamStartBin, wvfm.begin()+500);
         if (fFindPulses == false){
@@ -537,6 +538,7 @@ void sbnd::trigger::pmtSoftwareTriggerProducer::SimpleThreshAlgo(int i_ch){
   auto wvfm = fWvfmsVec[i_ch];
   auto &pmtInfo = fpmtInfoVec[i_ch]; 
   double baseline = pmtInfo.baseline;
+  std::cout << "Pulse baseline: " << baseline << std::endl;
   // double baseline_sigma = pmtInfo.baselineSigma;
   
   bool fire = false; // bool for if pulse has been detected

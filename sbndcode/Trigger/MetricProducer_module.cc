@@ -112,11 +112,12 @@ private:
   int num_pmt_frags;
 
 
-  void analyze_crt_fragment(artdaq::Fragment & frag);
+  void analyze_crt_fragment(const artdaq::Fragment& frag);
   void checkCAEN1730FragmentTimeStamp(const artdaq::Fragment &frag);
   void analyzeCAEN1730Fragment(const artdaq::Fragment &frag);
   void estimateBaseline(int i_ch);
   void SimpleThreshAlgo(int i_ch);
+  void PMTMetricsCalculator(std::unique_ptr<std::vector<sbnd::trigger::pmtSoftwareTrigger>>& pmt_metrics_v);
 
   // variables to create an output root tree
   TTree* _tree;
@@ -196,7 +197,6 @@ void sbndaq::MetricProducer::produce(art::Event& evt)
 
   // object to store trigger metrics in
   std::unique_ptr<std::vector<sbnd::trigger::pmtSoftwareTrigger>> pmt_metrics_v = std::make_unique<std::vector<sbnd::trigger::pmtSoftwareTrigger>>();
-  sbnd::trigger::pmtSoftwareTrigger pmt_metrics;
   // clear variables at the beginning of the event
   // move this to constructor??
   for (int ip=0;ip<7;++ip)  { crt_metrics.hitsperplane[ip]=0; hitsperplane[ip]=0;}
@@ -234,9 +234,11 @@ void sbndaq::MetricProducer::produce(art::Event& evt)
       }
     }
     else {
+      std::cout << "Handle size: " << handle->size() << "\n";
       // normal fragment
       size_t beamFragmentIdx = -1;
-      for (auto frag : *handle){
+      for (size_t i_frag = 0; i_frag < handle->size(); i_frag++){
+        const artdaq::Fragment& frag = (*handle)[i_frag];
         beamFragmentIdx++;
         if (frag.type()==sbndaq::detail::FragmentType::BERNCRTV2) {
           num_crt_frags++;
@@ -246,6 +248,7 @@ void sbndaq::MetricProducer::produce(art::Event& evt)
         if (frag.type()==sbndaq::detail::FragmentType::CAENV1730) {
           num_pmt_frags++;
           if (fCalcPMTMetrics){
+            size_t n_caen_frags = 0;
           // identify whether any fragments correspond to the beam spill
           // loop over fragments, in steps of 8
           //size_t beamFragmentIdx = 9999;
@@ -254,12 +257,27 @@ void sbndaq::MetricProducer::produce(art::Event& evt)
               checkCAEN1730FragmentTimeStamp(frag);//handle->at(fragmentIdx));
               // if set of fragment in time with beam found, process waveforms
               if (foundBeamTrigger && beamFragmentIdx != 9999) {
-                for (size_t fragmentIdx = beamFragmentIdx; fragmentIdx < beamFragmentIdx+8; fragmentIdx++) {
+                size_t finalIdx = (size_t)handle->size();
+                if(i_frag + 7 < finalIdx) finalIdx = i_frag + 8;
+                for (size_t fragmentIdx = i_frag; fragmentIdx < finalIdx; fragmentIdx++) {
+                  auto& caen_frag = handle->at(fragmentIdx);
+                  sbndaq::CAENV1730Fragment bb(caen_frag);
+                  auto const* md = bb.Metadata();
+                  // access timestamp
+                  uint32_t timestamp = md->timeStampNSec;
+                  if(timestamp != fTriggerTime) break;
+                  n_caen_frags += 1;
                   analyzeCAEN1730Fragment(handle->at(fragmentIdx));
                 }
+                if(n_caen_frags>0) n_caen_frags--;
                 fWvfmsFound = true;
               }
             }
+            PMTMetricsCalculator(pmt_metrics_v);
+            fWvfmsVec.clear(); fWvfmsVec.resize(15*8);
+            foundBeamTrigger = false;
+            fWvfmsFound = false;
+            i_frag += n_caen_frags;
           } //if saving pmt metrics
         } //if is pmt frag
       } //loop over frags
@@ -285,112 +303,17 @@ void sbndaq::MetricProducer::produce(art::Event& evt)
 
   }//if save crt metrics
 
-  if (fCalcPMTMetrics){
-
-    if (foundBeamTrigger && fWvfmsFound) {
-      // store timestamp of trigger, relative to beam window start
-      double triggerTimeStamp = fTriggerTime - beamWindowStart;
-      pmt_metrics.foundBeamTrigger = true;
-      pmt_metrics.triggerTimestamp = triggerTimeStamp;
-
-      _pmt_beam_trig = true;
-      _pmt_time_trig = triggerTimeStamp;
-      
-      if (fVerbose) std::cout << "Saving PMT trigger timestamp: " << triggerTimeStamp << " ns" << std::endl;
-
-      double promptPE = 0;
-      double prelimPE = 0;
-
-      int nAboveThreshold = 0;
-      // find the waveform bins that correspond to the start and end of the extended spill window (0 -> 1.8 us) within the 10 us waveform
-      // if the triggerTimeStamp < 1000, the beginning of the beam spill is *not* contained within the waveform
-      int beamStartBin = (triggerTimeStamp >= 1000)? 0 : int(500 - abs((triggerTimeStamp-1000)/2));
-      int beamEndBin   = (triggerTimeStamp >= 1000)? int(500 + (fBeamWindowLength*1e3 - triggerTimeStamp)/2) : (beamStartBin + (fBeamWindowLength*1e3)/2);
-
-      // wvfm loop to calculate metrics
-      for (int i_ch = 0; i_ch < 120; ++i_ch){
-        auto &pmtInfo = fpmtInfoVec.at(i_ch);
-        auto wvfm = fWvfmsVec[i_ch];
-
-        // assign channel
-        pmtInfo.channel = channelList.at(i_ch);
-
-        // calculate baseline
-        if (fCalculateBaseline) estimateBaseline(i_ch);
-        else { pmtInfo.baseline=fInputBaseline.at(0); pmtInfo.baselineSigma = fInputBaseline.at(1); }
-
-        // count number of PMTs above threshold
-        if (fCountPMTs){
-          for (int bin = beamStartBin; bin < beamEndBin; ++bin){
-            auto adc = wvfm[bin];
-            if (adc < fADCThreshold){ nAboveThreshold++; break; } 
-          }
-        }
-        else nAboveThreshold=-9999;
-
-        // quick estimate prompt and preliminary light, assuming sampling rate of 500 MHz (2 ns per bin)
-        if (fCalculatePEMetrics){
-          double baseline = pmtInfo.baseline;
-          auto prompt_window = std::vector<uint16_t>(wvfm.begin()+500, wvfm.begin()+1000);
-          auto prelim_window = std::vector<uint16_t>(wvfm.begin()+beamStartBin, wvfm.begin()+500);
-          if (fFindPulses == false){
-            double ch_promptPE = (baseline-(*std::min_element(prompt_window.begin(), prompt_window.end())))/8;
-            double ch_prelimPE = (baseline-(*std::min_element(prelim_window.begin(), prelim_window.end())))/8;
-            promptPE += ch_promptPE;
-            prelimPE += ch_prelimPE;
-          }
-          // pulse finder + prompt and prelim calculation with pulses
-          if (fFindPulses == true){
-            SimpleThreshAlgo(i_ch);
-            for (auto pulse : pmtInfo.pulseVec){
-              if (pulse.t_start > 500 && pulse.t_end < 550) promptPE+=pulse.pe;
-              if ((triggerTimeStamp) >= 1000){ if (pulse.t_end < 500) prelimPE+=pulse.pe; }
-              else if (triggerTimeStamp < 1000){
-                if (pulse.t_start > (500 - abs((triggerTimeStamp-1000)/2)) && pulse.t_end < 500) prelimPE+=pulse.pe;
-              }
-            }
-          }
-        } 
-      } // end of wvfm loop
-
-      pmt_metrics.nAboveThreshold = nAboveThreshold;    
-      pmt_metrics.promptPE = promptPE;
-      pmt_metrics.prelimPE = prelimPE;
-
-      // tree variables 
-      _pmt_npmt = nAboveThreshold;
-      _pmt_promptPE = promptPE; 
-      _pmt_prelimPE = prelimPE;
-
-      if (fVerbose && fCountPMTs) std::cout << "nPMTs Above Threshold: " << nAboveThreshold << std::endl;
-      if (fVerbose && fCalculatePEMetrics) std::cout << "prompt pe: " << promptPE << std::endl;
-      if (fVerbose && fCalculatePEMetrics) std::cout << "prelim pe: " << prelimPE << std::endl;
-    } // if beam and wvfms found 
-    else{
-      if (fVerbose) std::cout << "Beam and wvfms not found" << std::endl;
-      pmt_metrics.foundBeamTrigger = false;
-      pmt_metrics.triggerTimestamp = -9999;
-      pmt_metrics.nAboveThreshold = -9999;
-      pmt_metrics.promptPE = -9999;
-      pmt_metrics.prelimPE = -9999;
-
-      // tree variables 
-      _pmt_beam_trig = false; 
-      _pmt_time_trig = -9999; _pmt_npmt = -9999; _pmt_promptPE = -9999; _pmt_prelimPE = -9999;
-    }
-  }//if save pmt metrics
-
+  std::cout << "SoftwareMetrics len: " << pmt_metrics_v->size() << "\n";
   // add to event
   crt_metrics_v->push_back(crt_metrics);
   evt.put(std::move(crt_metrics_v));
-  pmt_metrics_v->push_back(pmt_metrics);
   evt.put(std::move(pmt_metrics_v)); 
-  _tree->Fill(); 
+//  _tree->Fill(); 
 }//produce
 
 
 
-void sbndaq::MetricProducer::analyze_crt_fragment(artdaq::Fragment & frag)
+void sbndaq::MetricProducer::analyze_crt_fragment(const artdaq::Fragment& frag)
 {
 
   sbndaq::BernCRTFragmentV2 bern_fragment(frag);
@@ -429,18 +352,19 @@ void sbndaq::MetricProducer::checkCAEN1730FragmentTimeStamp(const artdaq::Fragme
 
   // access beam signal, in ch15 of first PMT of each fragment set
   // check entry 500 (0us), at trigger time
-  const uint16_t* data_begin = reinterpret_cast<const uint16_t*>(frag.dataBeginBytes()
-                 + sizeof(sbndaq::CAENV1730EventHeader));
-  const uint16_t* value_ptr =  data_begin;
-  uint16_t value = 0;
+//  const uint16_t* data_begin = reinterpret_cast<const uint16_t*>(frag.dataBeginBytes()
+//                 + sizeof(sbndaq::CAENV1730EventHeader));
+//  const uint16_t* value_ptr =  data_begin;
+//  uint16_t value = 0;
 
-  size_t ch_offset = (size_t)(15*fWvfmLength);
-  size_t tr_offset = fTriggerTimeOffset*1e3;
+//  size_t ch_offset = (size_t)(15*fWvfmLength);
+//  size_t tr_offset = fTriggerTimeOffset*1e3;
 
-  value_ptr = data_begin + ch_offset + tr_offset; // pointer arithmetic
-  value = *(value_ptr);
+//  value_ptr = data_begin + ch_offset + tr_offset; // pointer arithmetic
+//  value = *(value_ptr);
 
-  if (value == 1 && timestamp >= beamWindowStart && timestamp <= beamWindowEnd) {
+  std::cout << "Trigger time: " << timestamp << "\n";
+  if (timestamp >= beamWindowStart && timestamp <= beamWindowEnd) {
     foundBeamTrigger = true;
     fTriggerTime = timestamp;
   }
@@ -547,12 +471,111 @@ void sbndaq::MetricProducer::SimpleThreshAlgo(int i_ch){
     pulse.area = 0; pulse.peak = 0; pulse.t_start = 0; pulse.t_end = 0; pulse.t_peak = 0;
   }
 
-  pmtInfo.pulseVec = pulse_vec;
+  for (auto &pulse : pulse_vec){pulse.pe = pulse.area/fPEArea;}
+//  std::cout << "found " << pulse_vec.size() << " pulses in frag channel" << std::endl;
+  pmtInfo.pulseVec.insert(pmtInfo.pulseVec.end(), pulse_vec.begin(), pulse_vec.end());
   // calculate PE from area
-  for (auto &pulse : pmtInfo.pulseVec){pulse.pe = pulse.area/fPEArea;}
 }//SimpleThreshAlgo
 
+void sbndaq::MetricProducer::PMTMetricsCalculator(
+  std::unique_ptr<std::vector<sbnd::trigger::pmtSoftwareTrigger>>& pmt_metrics_v)
+{
+  sbnd::trigger::pmtSoftwareTrigger pmt_metrics;  
+  if(fCalcPMTMetrics) {
+    if (foundBeamTrigger && fWvfmsFound) {
+      // store timestamp of trigger, relative to beam window start
+      double triggerTimeStamp = fTriggerTime - beamWindowStart;
+      pmt_metrics.foundBeamTrigger = true;
+      pmt_metrics.triggerTimestamp = triggerTimeStamp;
 
+      _pmt_beam_trig = true;
+      _pmt_time_trig = triggerTimeStamp;
+      
+      if (fVerbose) std::cout << "Saving PMT trigger timestamp: " << triggerTimeStamp << " ns" << std::endl;
+
+      double promptPE = 0;
+      double prelimPE = 0;
+
+      int nAboveThreshold = 0;
+      // find the waveform bins that correspond to the start and end of the extended spill window (0 -> 1.8 us) within the 10 us waveform
+      // if the triggerTimeStamp < 1000, the beginning of the beam spill is *not* contained within the waveform
+      int beamStartBin = (triggerTimeStamp >= 1000)? 0 : int(500 - abs((triggerTimeStamp-1000)/2));
+      int beamEndBin   = (triggerTimeStamp >= 1000)? int(500 + (fBeamWindowLength*1e3 - triggerTimeStamp)/2) : (beamStartBin + (fBeamWindowLength*1e3)/2);
+
+      // wvfm loop to calculate metrics
+      for (int i_ch = 0; i_ch < 120; ++i_ch){
+        auto &pmtInfo = fpmtInfoVec.at(i_ch);
+        auto wvfm = fWvfmsVec[i_ch];
+        if(wvfm.size()==0) continue;
+        // assign channel
+        pmtInfo.channel = channelList.at(i_ch);
+
+        // calculate baseline
+        if (fCalculateBaseline) estimateBaseline(i_ch);
+        else { pmtInfo.baseline=fInputBaseline.at(0); pmtInfo.baselineSigma = fInputBaseline.at(1); }
+
+        // count number of PMTs above threshold
+        if (fCountPMTs){
+          for (int bin = beamStartBin; bin < beamEndBin; ++bin){
+            auto adc = wvfm[bin];
+            if (adc < fADCThreshold){ nAboveThreshold++; break; } 
+          }
+        }
+        else nAboveThreshold=-9999;
+
+        // quick estimate prompt and preliminary light, assuming sampling rate of 500 MHz (2 ns per bin)
+        if (fCalculatePEMetrics){
+          double baseline = pmtInfo.baseline;
+          auto prompt_window = std::vector<uint16_t>(wvfm.begin()+500, wvfm.begin()+1000);
+          auto prelim_window = std::vector<uint16_t>(wvfm.begin()+beamStartBin, wvfm.begin()+500);
+          if (fFindPulses == false){
+            double ch_promptPE = (baseline-(*std::min_element(prompt_window.begin(), prompt_window.end())))/8;
+            double ch_prelimPE = (baseline-(*std::min_element(prelim_window.begin(), prelim_window.end())))/8;
+            promptPE += ch_promptPE;
+            prelimPE += ch_prelimPE;
+          }
+          // pulse finder + prompt and prelim calculation with pulses
+          if (fFindPulses == true){
+            SimpleThreshAlgo(i_ch);
+            for (auto pulse : pmtInfo.pulseVec){
+              if (pulse.t_start > 500 && pulse.t_end < 550) promptPE+=pulse.pe;
+              if ((triggerTimeStamp) >= 1000){ if (pulse.t_end < 500) prelimPE+=pulse.pe; }
+              else if (triggerTimeStamp < 1000){
+                if (pulse.t_start > (500 - abs((triggerTimeStamp-1000)/2)) && pulse.t_end < 500) prelimPE+=pulse.pe;
+              }
+            }
+          }
+        } 
+      } // end of wvfm loop
+
+      pmt_metrics.nAboveThreshold = nAboveThreshold;    
+      pmt_metrics.promptPE = promptPE;
+      pmt_metrics.prelimPE = prelimPE;
+
+      // tree variables 
+      _pmt_npmt = nAboveThreshold;
+      _pmt_promptPE = promptPE; 
+      _pmt_prelimPE = prelimPE;
+
+      if (fVerbose && fCountPMTs) std::cout << "nPMTs Above Threshold: " << nAboveThreshold << std::endl;
+//      if (fVerbose && fCalculatePEMetrics) std::cout << "prompt pe: " << promptPE << std::endl;
+      if (fVerbose && fCalculatePEMetrics) std::cout << "prelim pe: " << prelimPE << std::endl;
+    } // if beam and wvfms found 
+    else{
+      if (fVerbose) std::cout << "Beam and wvfms not found" << std::endl;
+      pmt_metrics.foundBeamTrigger = false;
+      pmt_metrics.triggerTimestamp = -9999;
+      pmt_metrics.nAboveThreshold = -9999;
+      pmt_metrics.promptPE = -9999;
+      pmt_metrics.prelimPE = -9999;
+
+      // tree variables 
+      _pmt_beam_trig = false; 
+      _pmt_time_trig = -9999; _pmt_npmt = -9999; _pmt_promptPE = -9999; _pmt_prelimPE = -9999;
+    }
+  }//if save pmt metrics
+  pmt_metrics_v->push_back(pmt_metrics);
+}
 // -------------------------------------------------
 
 // -------------------------------------------------
