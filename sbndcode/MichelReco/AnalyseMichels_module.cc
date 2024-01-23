@@ -49,6 +49,7 @@
 #include "sbncode/OpDet/PDMapAlg.h"
 #include "lardataobj/RecoBase/OpHit.h"
 #include "sbnobj/SBND/Trigger/Coincidence.hh"
+#include "sbnobj/SBND/Trigger/pmtSoftwareTrigger.hh"
 #include "sbnobj/Common/CRT/CRTHit.hh"
 #include "lardataobj/RecoBase/Track.h"
 #include "lardataobj/RecoBase/Shower.h"
@@ -120,9 +121,6 @@
 namespace sbnd {
 class AnalyseMichels;
 }
-
-
-
 class sbnd::AnalyseMichels : public art::EDAnalyzer {
   public:
   explicit AnalyseMichels(fhicl::ParameterSet const& p);
@@ -149,6 +147,7 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   void ResetVars();
 
   void getCoincidenceMatches(const art::Event& e);
+  void getPulseInfo(const art::Event& e);
   void FillMC(const art::Event& e, const art::Ptr<simb::MCParticle>& mcp, std::vector<art::Ptr<simb::MCParticle>>& mctruthVect);
   void FindRecoMichelShower(const art::Event& e);
   void FindRecoMichelTrack(const art::Event& e);
@@ -446,6 +445,12 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   bool fCoincTopTrig, fCoincTopIncTrig, fCoincAllTrig, fCoincMuon;
   std::vector<unsigned> fCoincPlanes;
 
+  // Pulse Tree
+  TTree* fPulseTree;
+  unsigned fSoftMetsIdx;
+   double fPulseTrigger;
+  std::vector<double> fPulsePeakVec, fPulseAreaVec, fPulseStartTVec, fPulsePeakTVec, fPulseEndTVec, fPulsePEVec;
+
   const std::set<unsigned> kTopPlanes = {5, 6, 7};
   const std::set<unsigned> kAllPlanes = {1, 2, 3, 4, 5, 6, 7};
 
@@ -465,6 +470,7 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   const std::string fOpHitLabel;
   const std::string fFragmentLabel;
   const std::string fCoincidenceLabel;
+  const std::string fPMTSoftwareTriggerLabel;
   const std::string fCRTHitLabel;
   const std::vector<unsigned> fCoincidencePlanes;
   const unsigned fPlaneCount;
@@ -504,6 +510,7 @@ sbnd::AnalyseMichels::AnalyseMichels(fhicl::ParameterSet const& p)
   , fOpHitLabel(p.get<std::string>("OpHitLabel"))
   , fFragmentLabel(p.get<std::string>("FragmentLabel", "fragmentProducer"))
   , fCoincidenceLabel(p.get<std::string>("CoincidenceLabel", "coincidence"))
+  , fPMTSoftwareTriggerLabel(p.get<std::string>("PMTSoftwareTriggerLabel", "softmetric"))
   , fCRTHitLabel(p.get<std::string>("CRTHitLabel"))
   , fCoincidencePlanes(p.get<std::vector<unsigned>>("CoincidencePlanes"))
   , fPlaneCount(std::count(fCoincidencePlanes.begin(), fCoincidencePlanes.end(), 1))
@@ -600,6 +607,7 @@ void sbnd::AnalyseMichels::analyze(art::Event const& e)
    
   // Get IDs of flashes matching specific coincidence;
   getCoincidenceMatches(e);
+  getPulseInfo(e);
 
   for(auto const &mcp: mctruthVect) {
     if(abs(mcp->PdgCode()) != 13 || abs(mcp->EndX()) > 200. || abs(mcp->EndY()) > 200. || mcp->EndZ() < 0. || mcp->EndZ() > 500.) continue;
@@ -887,6 +895,21 @@ void sbnd::AnalyseMichels::beginJob()
   fCoincTree->Branch("toptrig",			&fCoincTopTrig);
   fCoincTree->Branch("topinctrig",		&fCoincTopIncTrig);
   fCoincTree->Branch("alltrig",			&fCoincAllTrig);
+
+  fPulseTree = tfs->make<TTree>("pulse_tree", "Output Tree");
+
+  fPulseTree->Branch("run",			&fEventRun);
+  fPulseTree->Branch("sub",			&fEventSub);
+  fPulseTree->Branch("evt",			&fEventID);
+  fPulseTree->Branch("run",			&fSoftMetsIdx);
+  fPulseTree->Branch("id",			&fPulseTrigger);
+  fPulseTree->Branch("trigger_time",		&fPulsePeakVec);
+  fPulseTree->Branch("peak",			&fPulseAreaVec);
+  fPulseTree->Branch("area",			&fPulseStartTVec);
+  fPulseTree->Branch("t_start",			&fPulseStartTVec);
+  fPulseTree->Branch("t_peak",			&fPulsePeakTVec);
+  fPulseTree->Branch("t_end",			&fPulseEndTVec);
+  fPulseTree->Branch("pe",			&fPulsePEVec);
 
   fMCMichelEnergyHist = tfs->make<TH1D>("mcMichelEnergyHist", "Energy of MC Michels; Energy; Events", 40, 2, 1);
   fMCMuonEnergyHist = tfs->make<TH1D>("mcMuonEnergyHist", "Energy of MC muons; Energy; Events", 40, 2, 1);
@@ -1247,6 +1270,53 @@ void sbnd::AnalyseMichels::getCoincidenceMatches(
   }
   fNCrossingMuons = cross_times.size();
   fEventNFalseTriggers = nonmuon_coincs.size();
+}
+
+void sbnd::AnalyseMichels::getPulseInfo(
+  const art::Event& e)
+{
+  // Set pulse variable
+  fSoftMetsIdx = 9999;
+   fPulseTrigger = -9999.;
+  fPulseTree->Fill();
+  fPulsePeakVec.clear();
+  fPulseAreaVec.clear();
+  fPulseStartTVec.clear();
+  fPulsePeakTVec.clear();
+  fPulseEndTVec.clear();
+  fPulsePEVec.clear();
+
+  // Load pmtSoftwareTriggers
+  art::Handle< std::vector<sbnd::trigger::pmtSoftwareTrigger> > softHandle;
+  std::vector< art::Ptr<sbnd::trigger::pmtSoftwareTrigger> > softVect;
+  if(e.getByLabel(fPMTSoftwareTriggerLabel, softHandle))     // Make sure artHandle is from mo$
+    art::fill_ptr_vector(softVect, softHandle);
+
+  std::cout << "N Mets: " << softVect.size() << "\n";
+  for(unsigned i_soft = 0; i_soft < softVect.size(); i_soft++) {
+    auto soft = *(softVect)[i_soft];
+    fSoftMetsIdx = i_soft;
+    fPulseTrigger = float(soft.triggerTimestamp) / 1000.; // in us
+    std::cout << "  N Ch: " << soft.pmtInfoVec.size() << "\n";
+    for(auto soft_ch : soft.pmtInfoVec) {
+      std::cout << "    N Pulses: " << soft_ch.pulseVec.size() << "\n";
+      for(auto pulse : soft_ch.pulseVec) {
+        fPulsePeakVec.push_back(pulse.peak);
+        fPulseAreaVec.push_back(pulse.area);
+        fPulseStartTVec.push_back(pulse.t_start);
+        fPulsePeakTVec.push_back(pulse.t_peak);
+        fPulseEndTVec.push_back(pulse.t_end);
+        fPulsePEVec.push_back(pulse.pe);
+      }
+    }
+    fPulseTree->Fill();
+    fPulsePeakVec.clear();
+    fPulseAreaVec.clear();
+    fPulseStartTVec.clear();
+    fPulsePeakTVec.clear();
+    fPulseEndTVec.clear();
+    fPulsePEVec.clear();
+  }
 }
 
 void sbnd::AnalyseMichels::FillMC(
