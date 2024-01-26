@@ -254,6 +254,7 @@ void sbndaq::MetricProducer::produce(art::Event& evt)
           //size_t beamFragmentIdx = 9999;
           //for (size_t fragmentIdx = 0; fragmentIdx < handle->size(); fragmentIdx += 8) {
             if (!foundBeamTrigger){
+              fpmtInfoVec.clear(); fpmtInfoVec.resize(120);
               checkCAEN1730FragmentTimeStamp(frag);//handle->at(fragmentIdx));
               // if set of fragment in time with beam found, process waveforms
               if (foundBeamTrigger && beamFragmentIdx != 9999) {
@@ -456,7 +457,7 @@ void sbndaq::MetricProducer::SimpleThreshAlgo(int i_ch){
 
     if(fire){ // if we're in a pulse
       pulse.area += (baseline-(double)adc);
-      if (pulse.peak > (baseline-(double)adc)) { // Found a new maximum
+      if (pulse.peak < (baseline-(double)adc)) { // Found a new maximum
         pulse.peak = (baseline-(double)adc);
         pulse.t_peak = counter;
       }
@@ -484,7 +485,7 @@ void sbndaq::MetricProducer::PMTMetricsCalculator(
   if(fCalcPMTMetrics) {
     if (foundBeamTrigger && fWvfmsFound) {
       // store timestamp of trigger, relative to beam window start
-      double triggerTimeStamp = fTriggerTime - beamWindowStart;
+      double triggerTimeStamp = fTriggerTime - beamWindowStart - 1510.;
       pmt_metrics.foundBeamTrigger = true;
       pmt_metrics.triggerTimestamp = triggerTimeStamp;
 
@@ -574,6 +575,8 @@ void sbndaq::MetricProducer::PMTMetricsCalculator(
       _pmt_time_trig = -9999; _pmt_npmt = -9999; _pmt_promptPE = -9999; _pmt_prelimPE = -9999;
     }
   }//if save pmt metrics
+  pmt_metrics.pmtInfoVec = fpmtInfoVec;
+  std::cout << "Saved timestamp: " << pmt_metrics.triggerTimestamp << "\n";
   pmt_metrics_v->push_back(pmt_metrics);
 }
 // -------------------------------------------------

@@ -1,17 +1,17 @@
-//////////////////////////////////////////////////////////////////
+#//////////////////////////////////////////////////////////////////
 //
 // 			TO DO 					// 
 //////////////////////////////////////////////////////////////////
 
-// GET START POS FOR MC/RECO MICHEL AND RECO MUON
-// GET TRAJECTORY ANGLE FOR MC/RECO MUON/MICHEL
+// GET START SOP FOR MC/REDO MICHEL AND RECD MON
+// GET TRAJECTORY ANGLE FOR MC/RECTO MON/MICHEL
 // CREATE BOOLEAN FOR IF VERTEX IS AT WRONG END OF MUON
 // N Clusters for reco particles
 // Find neutrino interactrion vertex
 
 ///////////////////////////////////////////////////////////////////////
 // Class:       AnalyseMichels
-// Plugin Type: Analyser (Unknown Unknown)
+// Plugin Type: Analysis (Unknown Unknown)
 // File:        AnalyseMichels_module.cc
 //
 // Generated at Wed Oct 13 08:28:13 2021 by Edward Tyley using cetskelgen
@@ -211,7 +211,7 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   float fMaxAmpX;
   float fMaxAmpY;
   float fMaxAmpZ;
-  float fMaxAmpDist;   // Distnace from hit with max peak amplitude to michel/muon vertex
+  float fMaxAmpDist;   // Distance from hit with max peak amplitude to michel/muon vertex
   float fAmpMean;
   float fAmpSigma;
   float fSADCMean;
@@ -448,8 +448,14 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   // Pulse Tree
   TTree* fPulseTree;
   unsigned fSoftMetsIdx;
-   double fPulseTrigger;
-  std::vector<double> fPulsePeakVec, fPulseAreaVec, fPulseStartTVec, fPulsePeakTVec, fPulseEndTVec, fPulsePEVec;
+  double fPulseTrigger;
+  bool fPulseFromStoppingMuon;
+  double fPulseMichelBin;
+  std::vector<int> fPulseFromMichelVec;
+  std::vector<int> fPulseChVec;
+  std::vector<double> fPulseRatioVec;
+  std::vector<double> fPulseTrigPeakVec, fPulseTrigAreaVec, fPulseTrigPEVec, fPulseTrigTStartVec, fPulseTrigTEndVec, fPulseTrigTPeakVec;
+  std::vector<double> fPulseMichelPeakVec, fPulseMichelAreaVec, fPulseMichelPEVec, fPulseMichelTStartVec, fPulseMichelTEndVec, fPulseMichelTPeakVec;
 
   const std::set<unsigned> kTopPlanes = {5, 6, 7};
   const std::set<unsigned> kAllPlanes = {1, 2, 3, 4, 5, 6, 7};
@@ -484,6 +490,7 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   const double fTimeStart;
   const double fTimeEnd;
   const bool fMakeHists;
+  const double fPulsePeakMin;
 
   // Declare member data here.
   void FillMC(const art::Event& e, art::Ptr<simb::MCParticle>& mcp, std::vector<art::Ptr<simb::MCParticle>>& mctruthVect);
@@ -524,6 +531,7 @@ sbnd::AnalyseMichels::AnalyseMichels(fhicl::ParameterSet const& p)
   , fTimeStart(p.get<double>("TimeStart", 0.))
   , fTimeEnd(p.get<double>("TimeEnd", 10.))
   , fMakeHists(p.get<bool>("MakeHists", true))
+  , fPulsePeakMin(p.get<double>("PulsePeakMin", 50.))
 {
   // Call appropriate consumes<>() for any products to be retrieved by this module.
 }
@@ -901,15 +909,25 @@ void sbnd::AnalyseMichels::beginJob()
   fPulseTree->Branch("run",			&fEventRun);
   fPulseTree->Branch("sub",			&fEventSub);
   fPulseTree->Branch("evt",			&fEventID);
-  fPulseTree->Branch("run",			&fSoftMetsIdx);
-  fPulseTree->Branch("id",			&fPulseTrigger);
-  fPulseTree->Branch("trigger_time",		&fPulsePeakVec);
-  fPulseTree->Branch("peak",			&fPulseAreaVec);
-  fPulseTree->Branch("area",			&fPulseStartTVec);
-  fPulseTree->Branch("t_start",			&fPulseStartTVec);
-  fPulseTree->Branch("t_peak",			&fPulsePeakTVec);
-  fPulseTree->Branch("t_end",			&fPulseEndTVec);
-  fPulseTree->Branch("pe",			&fPulsePEVec);
+  fPulseTree->Branch("id",			&fSoftMetsIdx);
+  fPulseTree->Branch("trigger_time",		&fPulseTrigger);
+  fPulseTree->Branch("stopping",		&fPulseFromStoppingMuon);
+  fPulseTree->Branch("michel_bin",		&fPulseMichelBin);
+  fPulseTree->Branch("channel",			&fPulseChVec);
+  fPulseTree->Branch("found_michel",		&fPulseFromMichelVec);
+  fPulseTree->Branch("trig.peak",		&fPulseTrigPeakVec);
+  fPulseTree->Branch("trig.area",		&fPulseTrigAreaVec);
+  fPulseTree->Branch("trig.t_start",		&fPulseTrigTStartVec);
+  fPulseTree->Branch("trig.t_peak",		&fPulseTrigTPeakVec);
+  fPulseTree->Branch("trig.t_end",		&fPulseTrigTEndVec);
+  fPulseTree->Branch("trig.pe",			&fPulseTrigPEVec);
+  fPulseTree->Branch("michel.peak",		&fPulseMichelPeakVec);
+  fPulseTree->Branch("michel.area",		&fPulseMichelAreaVec);
+  fPulseTree->Branch("michel.t_start",		&fPulseMichelTStartVec);
+  fPulseTree->Branch("michel.t_peak",		&fPulseMichelTPeakVec);
+  fPulseTree->Branch("michel.t_end",		&fPulseMichelTEndVec);
+  fPulseTree->Branch("michel.pe",		&fPulseMichelPEVec);
+  fPulseTree->Branch("ratio",			&fPulseRatioVec);
 
   fMCMichelEnergyHist = tfs->make<TH1D>("mcMichelEnergyHist", "Energy of MC Michels; Energy; Events", 40, 2, 1);
   fMCMuonEnergyHist = tfs->make<TH1D>("mcMuonEnergyHist", "Energy of MC muons; Energy; Events", 40, 2, 1);
@@ -1275,48 +1293,116 @@ void sbnd::AnalyseMichels::getCoincidenceMatches(
 void sbnd::AnalyseMichels::getPulseInfo(
   const art::Event& e)
 {
-  // Set pulse variable
-  fSoftMetsIdx = 9999;
-   fPulseTrigger = -9999.;
-  fPulseTree->Fill();
-  fPulsePeakVec.clear();
-  fPulseAreaVec.clear();
-  fPulseStartTVec.clear();
-  fPulsePeakTVec.clear();
-  fPulseEndTVec.clear();
-  fPulsePEVec.clear();
-
   // Load pmtSoftwareTriggers
   art::Handle< std::vector<sbnd::trigger::pmtSoftwareTrigger> > softHandle;
   std::vector< art::Ptr<sbnd::trigger::pmtSoftwareTrigger> > softVect;
   if(e.getByLabel(fPMTSoftwareTriggerLabel, softHandle))     // Make sure artHandle is from mo$
     art::fill_ptr_vector(softVect, softHandle);
 
-  std::cout << "N Mets: " << softVect.size() << "\n";
-  for(unsigned i_soft = 0; i_soft < softVect.size(); i_soft++) {
-    auto soft = *(softVect)[i_soft];
-    fSoftMetsIdx = i_soft;
-    fPulseTrigger = float(soft.triggerTimestamp) / 1000.; // in us
-    std::cout << "  N Ch: " << soft.pmtInfoVec.size() << "\n";
-    for(auto soft_ch : soft.pmtInfoVec) {
-      std::cout << "    N Pulses: " << soft_ch.pulseVec.size() << "\n";
-      for(auto pulse : soft_ch.pulseVec) {
-        fPulsePeakVec.push_back(pulse.peak);
-        fPulseAreaVec.push_back(pulse.area);
-        fPulseStartTVec.push_back(pulse.t_start);
-        fPulsePeakTVec.push_back(pulse.t_peak);
-        fPulseEndTVec.push_back(pulse.t_end);
-        fPulsePEVec.push_back(pulse.pe);
+
+  // Load MCParticles
+  art::Handle< std::vector<simb::MCParticle> > mctruthHandle;
+  std::vector< art::Ptr<simb::MCParticle> > mctruthVect;
+  if(e.getByLabel(fMCTruthLabel, mctruthHandle))     // Make sure artHandle is from mo$
+    art::fill_ptr_vector(mctruthVect, mctruthHandle);
+
+  // Remove triggers associated with stopping muons
+  std::vector<double> muon_times, michel_times;
+  for(auto& mcp : mctruthVect) {
+    double start_x = mcp->Position().Vect().X();
+    double start_y = mcp->Position().Vect().Y();
+    double start_z = mcp->Position().Vect().Z();
+    if(abs(mcp->PdgCode()) != 13 || (abs(start_x) < 200. && abs(start_y) < 200. && start_z > 0. && start_z < 500.)) continue;
+    double muon_time = -9999.;
+    for(unsigned pos=0;pos<mcp->NumberTrajectoryPoints(); pos++) {
+      if((abs(mcp->Position(pos).X()) < 200.) &&
+         (abs(mcp->Position(pos).Y()) < 200.) &&
+         (mcp->Position(pos).Z() > 0.) &&
+         (mcp->Position(pos).Z() < 500.)) {
+        muon_time = mcp->T(pos) / 1000.; // us relative to beam spill
+        break;
       }
     }
-    fPulseTree->Fill();
-    fPulsePeakVec.clear();
-    fPulseAreaVec.clear();
-    fPulseStartTVec.clear();
-    fPulsePeakTVec.clear();
-    fPulseEndTVec.clear();
-    fPulsePEVec.clear();
+    if(abs(mcp->PdgCode()) != 13 || abs(mcp->EndX()) > 200. || abs(mcp->EndY()) > 200. || mcp->EndZ() < 0. || mcp->EndZ() > 500.) continue;
+    else {
+      muon_times.push_back(muon_time);
+      michel_times.push_back(mcp->EndT() / 1000.);
+    }
   }
+  
+  // Get info from pmtSoftwareTriggers
+  for(unsigned i_soft = 0; i_soft < softVect.size(); i_soft++) {
+    auto soft = *(softVect)[i_soft];
+
+    // Set pulse variable
+    fSoftMetsIdx = i_soft;
+    fPulseMichelBin = -9999.;
+    fPulseTrigger = soft.triggerTimestamp;
+    fPulseChVec.clear();
+    fPulseRatioVec.clear();
+    fPulseTrigPeakVec.clear();
+    fPulseTrigAreaVec.clear();
+    fPulseTrigTStartVec.clear();
+    fPulseTrigTPeakVec.clear();
+    fPulseTrigTEndVec.clear();
+    fPulseTrigPEVec.clear();
+    fPulseMichelPeakVec.clear();
+    fPulseMichelAreaVec.clear();
+    fPulseMichelTStartVec.clear();
+    fPulseMichelTPeakVec.clear();
+    fPulseMichelTEndVec.clear();
+    fPulseMichelPEVec.clear();
+    fPulseFromStoppingMuon = false;
+    fPulseFromMichelVec.clear();
+
+    // Check if trigger corresponds to stopping muon
+    double soft_beam_time = (soft.triggerTimestamp/1000.) - 1510.;
+    double michel_pulse_bin = 9999.;
+    for(unsigned i_muon = 0; i_muon< muon_times.size(); i_muon++) {
+      if(muon_times[i_muon] > soft_beam_time - 20. && muon_times[i_muon] < soft_beam_time + 20.) {
+        fPulseFromStoppingMuon = true;
+        michel_pulse_bin = ((michel_times[i_muon] - muon_times[i_muon]) / 0.002) + 500.;
+        std::cout << michel_times[i_muon] << " " << muon_times[i_muon] << " " << michel_pulse_bin << "\n";
+        fPulseMichelBin = michel_pulse_bin;
+      }
+    }
+    fSoftMetsIdx = i_soft;
+    fPulseTrigger = soft_beam_time; // in us
+    
+    // Loop ovr PMT channels
+    for(auto soft_ch : soft.pmtInfoVec) {
+      // Check there arpulses and that some are above are above minimum peak
+      auto pulse_vec = soft_ch.pulseVec;
+      if(pulse_vec.empty()) continue;
+
+      double min_peak = fPulsePeakMin;
+      auto trig_pulse_it = std::partition(pulse_vec.begin(), pulse_vec.end(),
+           [min_peak](sbnd::trigger::pmtPulse& pulse) {return pulse.peak > min_peak &&
+           pulse.t_start >= 480. && pulse.t_start <= 520.;});
+     if(std::distance(pulse_vec.begin(), trig_pulse_it)==0) continue;
+     auto trig_pulse = *max_element(pulse_vec.begin(), trig_pulse_it,
+           [] (sbnd::trigger::pmtPulse& p_a, sbnd::trigger::pmtPulse& p_b) {return p_a.peak < p_b.peak;});
+
+      auto michel_pulse_it = std::partition(pulse_vec.begin(), pulse_vec.end(),
+           [min_peak](sbnd::trigger::pmtPulse& pulse) {return pulse.peak > min_peak &&
+           pulse.t_start >= 550.;});
+     if(std::distance(pulse_vec.begin(), michel_pulse_it)==0) continue;
+     auto michel_pulse = *max_element(pulse_vec.begin(), michel_pulse_it,
+           [] (sbnd::trigger::pmtPulse& p_a, sbnd::trigger::pmtPulse& p_b) {return p_a.peak < p_b.peak;});
+
+      int michel_pulse_true = (michel_pulse.t_start <= michel_pulse_bin + 20 && michel_pulse.t_start >= michel_pulse_bin - 20.) ? 1 : 0;
+
+      fPulseFromMichelVec.push_back(michel_pulse_true);
+      fPulseChVec.push_back(soft_ch.channel); fPulseRatioVec.push_back(michel_pulse.peak / trig_pulse.peak);
+      fPulseTrigPeakVec.push_back(trig_pulse.peak); fPulseTrigAreaVec.push_back(trig_pulse.area);
+      fPulseTrigPEVec.push_back(trig_pulse.pe); fPulseTrigTStartVec.push_back(trig_pulse.t_start);
+      fPulseTrigTEndVec.push_back(trig_pulse.t_end); fPulseTrigTPeakVec.push_back(trig_pulse.t_peak);
+      fPulseMichelPeakVec.push_back(michel_pulse.peak); fPulseMichelAreaVec.push_back(michel_pulse.area);
+      fPulseMichelPEVec.push_back(michel_pulse.pe); fPulseMichelTStartVec.push_back(michel_pulse.t_start);
+      fPulseMichelTEndVec.push_back(michel_pulse.t_end); fPulseMichelTPeakVec.push_back(michel_pulse.t_peak);
+    } // Channel loop
+    fPulseTree->Fill();
+  } // Software trigger loop
 }
 
 void sbnd::AnalyseMichels::FillMC(
@@ -1603,7 +1689,7 @@ void sbnd::AnalyseMichels::FindOpticalData(
   art::Handle<std::vector<recob::OpHit>> ophitHandle;
   e.getByLabel(fOpHitLabel, ophitHandle);
 
-  std::cout << "NOpHits: " << ophitHandle->size() << std::endl;
+//  std::cout << "NOpHits: " << ophitHandle->size() << std::endl;
   fEventNOpHits = ophitHandle->size();
 
   std::vector<recob::OpHit> ophits(ophitHandle->size());
@@ -1615,10 +1701,10 @@ void sbnd::AnalyseMichels::FindOpticalData(
                (oph.StartTime() < end)); };
   auto ophit_it = std::copy_if(ophitHandle->begin(), ophitHandle->end(), ophits.begin(), opHitInWindow);
   ophits.resize(std::distance(ophits.begin(), ophit_it));
-  std::cout << "Intime OpHits: " << ophits.size() << std::endl;
+//  std::cout << "Intime OpHits: " << ophits.size() << std::endl;
   if(ophits.empty()) return;
 
-  std::cout << "OpHits in time: " << ophits.size() << std::endl;
+//  std::cout << "OpHits in time: " << ophits.size() << std::endl;
   
   for(auto& oph : ophits) {
     fOpHitTimes.push_back(oph.StartTime());
@@ -1633,8 +1719,8 @@ void sbnd::AnalyseMichels::FindOpticalData(
 
   double start_time = ophits[0].StartTime();
   double end_time = ophits[ophits.size()-1].StartTime();
-  std::cout << "StartTime: " << start_time << std::endl;
-  std::cout << "EndTime: " << end_time << std::endl;
+//  std::cout << "StartTime: " << start_time << std::endl;
+//  std::cout << "EndTime: " << end_time << std::endl;
   auto clockData = art::ServiceHandle<detinfo::DetectorClocksService const>()->DataForJob();
   double tickPeriod = clockData.OpticalClock().TickPeriod();
   unsigned bins = unsigned(1./tickPeriod * (fTimeEnd - fTimeStart));
@@ -1703,7 +1789,7 @@ void sbnd::AnalyseMichels::FindCRTHitData(
   if (e.getByLabel(fCRTHitLabel, crtHitHandle))
     art::fill_ptr_vector(crtHitVec, crtHitHandle);
 
-  std::cout << "CRT hits found: " << crtHitVec.size() << std::endl;
+//  std::cout << "CRT hits found: " << crtHitVec.size() << std::endl;
 
   for(auto& hit : crtHitVec) {
     fCRTHitPlane.push_back(hit->plane);
