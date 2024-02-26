@@ -1,0 +1,55 @@
+#include "fm_scores_sbnd_sce.fcl"
+
+physics.producers.fmatchSCEthreshold.UseGeoThresold: true
+physics.producers.fmatchSCEopthreshold.UseGeoThresold: true
+physics.producers.fmatchSCEarathreshold.UseGeoThresold: true
+physics.producers.fmatchSCEoparathreshold.UseGeoThresold: true
+
+physics.producers.fmatchSCEbaryxyz.UseScore: false
+physics.producers.fmatchSCEbaryxyz.UseGeoThreshold: true
+physics.producers.fmatchSCEbaryxyzop.UseScore: false
+physics.producers.fmatchSCEbaryxyzop.UseGeoThreshold: true
+physics.producers.fmatchSCEbaryxyzara.UseScore: false
+physics.producers.fmatchSCEbaryxyzara.UseGeoThreshold: true
+physics.producers.fmatchSCEbaryxyzopara.UseScore: false
+physics.producers.fmatchSCEbaryxyzopara.UseGeoThreshold: true
+
+physics.producers.fmatchSCEbaryyz.UseScore: false
+physics.producers.fmatchSCEbaryyz.YZDist: true
+physics.producers.fmatchSCEbaryyz.UseGeoThreshold: true
+physics.producers.fmatchSCEbaryyzop.UseScore: false
+physics.producers.fmatchSCEbaryyzop.YZDist: true
+physics.producers.fmatchSCEbaryyzop.UseGeoThreshold: true
+physics.producers.fmatchSCEbaryyzara.UseScore: false
+physics.producers.fmatchSCEbaryyzara.YZDist: true
+physics.producers.fmatchSCEbaryyzara.UseGeoThreshold: true
+physics.producers.fmatchSCEbaryyzopara.UseScore: false
+physics.producers.fmatchSCEbaryyzopara.YZDist: true
+physics.producers.fmatchSCEbaryyzopara.UseGeoThreshold: true
+
+physics.producers.fmatchSCEpolybaryxyz.UseScore: false
+physics.producers.fmatchSCEpolybaryxyzop.UseScore: false
+physics.producers.fmatchSCEpolybaryxyzara.UseScore: false
+physics.producers.fmatchSCEpolybaryxyzopara.UseScore: false
+
+physics.producers.fmatchSCEpolybaryyz.UseScore: false
+physics.producers.fmatchSCEpolybaryyz.YZDist: true
+physics.producers.fmatchSCEpolybaryyzop.UseScore: false
+physics.producers.fmatchSCEpolybaryyzop.YZDist: true
+physics.producers.fmatchSCEpolybaryyzara.UseScore: false
+physics.producers.fmatchSCEpolybaryyzara.YZDist: true
+physics.producers.fmatchSCEpolybaryyzopara.UseScore: false
+physics.producers.fmatchSCEpolybaryyzopara.YZDist: true
+
+physics.producers.fmatchSCEmc.FlashFindingTimeStart: @local::sbnd_simple_flashmatch.BeamSpillTimeStart
+physics.producers.fmatchSCEmc.FlashFindingTimeEnd:   @local::sbnd_simple_flashmatch.BeamSpillTimeEnd
+physics.producers.fmatchSCEmc.MaxFlashes: 1
+physics.producers.fmatchSCEmcop.FlashFindingTimeStart: @local::sbnd_simple_flashmatch_op.BeamSpillTimeStart
+physics.producers.fmatchSCEmcop.FlashFindingTimeEnd:   @local::sbnd_simple_flashmatch_op.BeamSpillTimeEnd
+physics.producers.fmatchSCEmcop.MaxFlashes: 1
+physics.producers.fmatchSCEmcara.FlashFindingTimeStart: @local::sbnd_simple_flashmatch_ara.BeamSpillTimeStart
+physics.producers.fmatchSCEmcara.FlashFindingTimeEnd:   @local::sbnd_simple_flashmatch_ara.BeamSpillTimeEnd
+physics.producers.fmatchSCEmcara.MaxFlashes: 1
+physics.producers.fmatchSCEmcopara.FlashFindingTimeStart: @local::sbnd_simple_flashmatch_opara.BeamSpillTimeStart
+physics.producers.fmatchSCEmcopara.FlashFindingTimeEnd:   @local::sbnd_simple_flashmatch_opara.BeamSpillTimeEnd
+physics.producers.fmatchSCEmcopara.MaxFlashes: 1

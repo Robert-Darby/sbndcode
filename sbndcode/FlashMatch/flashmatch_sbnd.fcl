@@ -27,6 +27,7 @@ sbnd_simple_flashmatch:{
   SelectNeutrino: true # it's too buggy to set 'false'
   SortOpFlashIntegral: false	# True: Select OpFlashes by total PE count. False: Select OpFlashes by PE peak amplitude (same as SimpleFlashes)
   UseOpCoords: true
+  InputSearchPath: "FW_SEARCH_PATH"
   MakeTree: true # false
   StoreMCInfo: true # false
   UseScore: true	# true = match charge/flash pairs with lowest score, false = match pairs with closest barycenters

@@ -1,8 +1,50 @@
 #include "fm_scores_sbnd.fcl"
 
 physics: {
-  producers: { fmatchSCE: @local::sbnd_simple_flashmatch_sce }
-  reco: [fmatchSCE]
+  producers: {
+  # Score, poly correction
+    fmatchSCE: @local::sbnd_simple_flashmatch_sce
+    fmatchSCEara: @local::sbnd_simple_flashmatch_ara_sce       # For XARAPUCA SimpleFlashes
+    fmatchSCEop: @local::sbnd_simple_flashmatch_op_sce       # For PMT OpFlashes
+    fmatchSCEopara: @local::sbnd_simple_flashmatch_opara_sce       # For XARAPUCA OpFlashes
+  # Score threshold correction
+    fmatchSCEthreshold: @local::sbnd_simple_flashmatch_sce        # For PMT SimpleFlashes
+    fmatchSCEthresholdara: @local::sbnd_simple_flashmatch_ara_sce# For XARAPUCA SimpleFlashes
+    fmatchSCEthresholdop: @local::sbnd_simple_flashmatch_op_sce # For PMT OpFlashes
+    fmatchSCEthresholdopara: @local::sbnd_simple_flashmatch_opara_sce # For XARAPUCA OpFlashes
+  # Barycenter dxyz, threshold
+    fmatchSCEbaryxyz: @local::sbnd_simple_flashmatch_sce        # For PMT SimpleFlashes
+    fmatchSCEbaryxyzara: @local::sbnd_simple_flashmatch_ara_sce # For XARAPUCA SimpleFlashes
+    fmatchSCEbaryxyzop: @local::sbnd_simple_flashmatch_op_sce # For PMT OpFlashes
+    fmatchSCEbaryxyzopara: @local::sbnd_simple_flashmatch_opara_sce# For XARAPUCA OpFlashes
+  # Barycenter dyz, threshold
+    fmatchSCEbaryyz: @local::sbnd_simple_flashmatch_sce        # For PMT SimpleFlashes
+    fmatchSCEbaryyzara: @local::sbnd_simple_flashmatch_ara_sce # For XARAPUCA SimpleFlashes
+    fmatchSCEbaryyzop: @local::sbnd_simple_flashmatch_op_sce # For PMT OpFlashes
+    fmatchSCEbaryyzopara: @local::sbnd_simple_flashmatch_opara_sce # For XARAPUCA OpFlashes
+  # Bary xyz, poly
+    fmatchSCEpolybaryxyz: @local::sbnd_simple_flashmatch_sce        # For PMT SimpleFlashes
+    fmatchSCEpolybaryxyzara: @local::sbnd_simple_flashmatch_ara_sce # For XARAPUCA SimpleFlashes
+    fmatchSCEpolybaryxyzop: @local::sbnd_simple_flashmatch_op_sce # For PMT OpFlashes
+    fmatchSCEpolybaryxyzopara: @local::sbnd_simple_flashmatch_opara_sce # For XARAPUCA OpFlashes
+  # Bary yz, poly
+    fmatchSCEpolybaryyz: @local::sbnd_simple_flashmatch_sce        # For PMT SimpleFlashes
+    fmatchSCEpolybaryyzara: @local::sbnd_simple_flashmatch_ara_sce # For XARAPUCA SimpleFlashes
+    fmatchSCEpolybaryyzop: @local::sbnd_simple_flashmatch_op_sce # For PMT OpFlashes
+    fmatchSCEpolybaryyzopara: @local::sbnd_simple_flashmatch_opara_sce # For XARAPUCA OpFlashes
+  # MC Cheating
+    fmatchSCEmc: @local::sbnd_simple_flashmatch_sce        # For PMT SimpleFlashes
+    fmatchSCEmcara: @local::sbnd_simple_flashmatch_ara_sce # For XARAPUCA SimpleFlashes
+    fmatchSCEmcop: @local::sbnd_simple_flashmatch_op_sce # For PMT OpFlashes
+    fmatchSCEmcopara: @local::sbnd_simple_flashmatch_opara_sce # For XARAPUCA OpFlashes
+  }
+  reco: [fmatchSCE, fmatchSCEop, fmatchSCEara, fmatchSCEopara,
+         fmatchSCEthreshold, fmatchSCEthresholdop, fmatchSCEthresholdara, fmatchSCEthresholdopara,
+         fmatchSCEbaryxyz, fmatchSCEbaryxyzop, fmatchSCEbaryxyzara, fmatchSCEbaryxyzopara,
+         fmatchSCEbaryyz, fmatchSCEbaryyzop, fmatchSCEbaryyzara, fmatchSCEbaryyzopara,
+#         fmatchSCEpolybaryxyz, fmatchSCEpolybaryxyzop, fmatchSCEpolybaryxyzara, fmatchSCEpolybaryxyzopara,
+#         fmatchSCEpolybaryyz, fmatchSCEpolybaryyzop, fmatchSCEpolybaryyzara, fmatchSCEpolybaryyzopara,
+         fmatchSCEmc, fmatchSCEmcop, fmatchSCEmcara, fmatchSCEmcopara]
 }
 
 #include "enable_spacecharge_services_sbnd.fcl"
