@@ -19,17 +19,22 @@
 #include "art/Framework/Core/ModuleMacros.h"
 #include "art/Framework/Principal/Event.h"
 #include "art/Framework/Principal/Handle.h"
+#include "art/Persistency/Common/PtrMaker.h"
 #include "art/Framework/Principal/Run.h"
 #include "art/Framework/Principal/SubRun.h"
 #include "canvas/Utilities/InputTag.h"
 #include "fhiclcpp/ParameterSet.h"
 #include "messagefacility/MessageLogger/MessageLogger.h"
 #include "art_root_io/TFileService.h"
+#include "art/Utilities/make_tool.h"
 
 // artdaq includes
+#include "sbndaq-artdaq-core/Overlays/Common/BernCRTFragmentV2.hh"
 #include "sbndaq-artdaq-core/Overlays/Common/CAENV1730Fragment.hh"
 #include "sbndaq-artdaq-core/Overlays/FragmentType.hh"
 #include "artdaq-core/Data/Fragment.hh"
+
+#include"sbndaq-artdaq-core/Obj/SBND/Coincidence.hh"
 
 // LArSoft includes
 #include "lardata/DetectorInfoServices/DetectorClocksService.h"
@@ -77,16 +82,30 @@ public:
 
 private:
 
+  void getCRTTimeStamps(
+    art::Event& e,
+    std::map<int, unsigned>& coincTimeStamps);
+  double fMinStartTime;
+  double fMaxEndTime;
+
+
   // Declare member data here.
 
   // fhicl parameters
   std::string fInputModuleNameWvfm;
+  std::string fWaveformInstanceName;
   std::string fInputModuleNameTrigger;
   int fBaseline; // baseline in simulation, default 8000 ADC (for expanding waveforms only, when not fully simulated)
   int fMultiplicityThreshold; // number of PMT pairs in hardware trigger to pass
+  double fBeamWindowStart;
   double fBeamWindowLength;
   uint32_t nChannelsFrag;
   uint32_t wfm_length; // ~10us, 2ns tick 
+  int fCoincidenceWindow;
+  float fCRTTriggerOffset;
+  float fCRTClockFreq;
+  std::string fCRTFragLabel;
+  std::vector<std::vector<unsigned>> fCRTCoincidence; 
   bool fVerbose;
 
   // event information
@@ -115,18 +134,26 @@ private:
 sbnd::trigger::pmtArtdaqFragmentProducer::pmtArtdaqFragmentProducer(fhicl::ParameterSet const& p)
   : EDProducer{p},
   fInputModuleNameWvfm(p.get<std::string>("InputModuleNameWvfm")),
+  fWaveformInstanceName(p.get<std::string>("WaveformInstanceName", "PMTChannels")),
   fInputModuleNameTrigger(p.get<std::string>("InputModuleNameTrigger")),
   fBaseline(p.get<int>("Baseline",8000)),
   fMultiplicityThreshold(p.get<int>("MultiplicityThreshold")),
+  fBeamWindowStart(p.get<double>("BeamWindowStart", 1510.)),
   fBeamWindowLength(p.get<double>("BeamWindowLength", 1.6)),
   nChannelsFrag(p.get<double>("nChannelsFrag", 15)),
   wfm_length(p.get<double>("WfmLength", 5120)),
+  fCoincidenceWindow(p.get<int>("CoincidenceWindow", 1000)),
+  fCRTTriggerOffset(p.get<float>("CRTTriggerOffset", 1700000)),
+  fCRTClockFreq(p.get<float>("CRTClockFreq", 1000.)),
+  fCRTFragLabel(p.get<std::string>("CRTFragLabel")),
+  fCRTCoincidence(p.get<std::vector<std::vector<unsigned>>>("CRTCoincidence")),
   fVerbose(p.get<bool>("Verbose", false)),
     fTriggerTimeEngine(art::ServiceHandle<rndm::NuRandomService>{}->registerAndSeedEngine(
                          createEngine(0, "HepJamesRandom", "trigger"), "HepJamesRandom", "trigger", p, "SeedTriggerTime"))
   // More initializers here.
 {
   // Call appropriate produces<>() functions here.
+  produces< std::vector<sbnd::trigger::Coincidence> >(); 
   produces< std::vector<artdaq::Fragment> >();
 
   // get clock
@@ -134,6 +161,7 @@ sbnd::trigger::pmtArtdaqFragmentProducer::pmtArtdaqFragmentProducer(fhicl::Param
   fSampling = clockData.OpticalClock().Frequency(); // MHz
 
   // build PD map and channel list
+
   auto subsetCondition = [](auto const& i)->bool { return i["pd_type"] == "pmt_coated" || i["pd_type"] == "pmt_uncoated"; };
   auto pmtMap = pdMap.getCollectionFromCondition(subsetCondition);
   if (fVerbose) std::cout << "Number of PDs selected: \t" << pmtMap.size() << "\n";
@@ -156,8 +184,22 @@ void sbnd::trigger::pmtArtdaqFragmentProducer::produce(art::Event& e)
 
   // access PMT waveforms and hardware trigger information
   art::Handle< std::vector< raw::OpDetWaveform > > wvfmHandle;
+   std::vector<art::Handle<std::vector<raw::OpDetWaveform>>> waveformHandles = e.getMany<std::vector<raw::OpDetWaveform>>();
+   std::cout << "\n\n\n Module Initialised \n";
+
+   std::string wv_name = fWaveformInstanceName;
+   waveformHandles.erase(
+     std::remove_if(waveformHandles.begin(), waveformHandles.end(),
+            [&wv_name](const art::Handle<std::vector<raw::OpDetWaveform>>& handle) {
+                if (handle.isValid()) {
+                    auto const& prov = handle.provenance();
+                    return prov->productInstanceName() != wv_name;}
+                return false;}),
+     waveformHandles.end());
+
+  wvfmHandle = waveformHandles[0];
+
   art::Handle< std::vector< sbnd::comm::pmtTrigger > > triggerHandle;
-  e.getByLabel(fInputModuleNameWvfm, wvfmHandle);
   e.getByLabel(fInputModuleNameTrigger, triggerHandle);
 
   if(!wvfmHandle.isValid()) {
@@ -170,8 +212,8 @@ void sbnd::trigger::pmtArtdaqFragmentProducer::produce(art::Event& e)
   }
 
   // create empty vectors to hold waveforms for each channel
-  double fMinStartTime = -1510.0;//in us
-  double fMaxEndTime = 1510.0;//in us
+  fMinStartTime = std::numeric_limits<double>::max();//in us
+  fMaxEndTime = -std::numeric_limits<double>::max();//in us
 
   for(auto const& wvf : (*wvfmHandle)) {
     double fChNumber = wvf.ChannelNumber();
@@ -179,7 +221,8 @@ void sbnd::trigger::pmtArtdaqFragmentProducer::produce(art::Event& e)
     // only look at pmts
     if (opdetType != "pmt_coated" && opdetType != "pmt_uncoated") continue;
       if (wvf.TimeStamp() < fMinStartTime){ fMinStartTime = wvf.TimeStamp(); }
-      if ((double(wvf.size()) / fSampling + wvf.TimeStamp()) > fMaxEndTime){ fMaxEndTime = double(wvf.size()) / fSampling + wvf.TimeStamp();}
+      auto end_time = (double)wvf.size() / fSampling + wvf.TimeStamp();
+      if ((double)end_time > fMaxEndTime){ fMaxEndTime = (double)end_time;}
   }
 
   if (fVerbose){std::cout<<"MinStartTime: "<<fMinStartTime<<" MaxEndTime: "<<fMaxEndTime<<std::endl;}
@@ -251,6 +294,9 @@ void sbnd::trigger::pmtArtdaqFragmentProducer::produce(art::Event& e)
     wvfmHandle.clear();
   } // waveform handle loop
 
+  std::map<int, unsigned> CRTTimes;
+  getCRTTimeStamps(e, CRTTimes);
+
   // access hardware trigger information
   std::vector<size_t> triggerIndex; 
   for(auto const& trigger : (*triggerHandle)) {
@@ -264,6 +310,35 @@ void sbnd::trigger::pmtArtdaqFragmentProducer::produce(art::Event& e)
     }
   } // trigger handle loop
 
+  // Only make fragments with CRT coincident triggers
+  for(auto i_pmt : triggerIndex) {CRTTimes.insert(std::pair<int, unsigned>(i_pmt, 7));}
+  for(auto coinc : CRTTimes) std::cout << coinc.second << " " << coinc.first << "\n";
+  std::map<int, unsigned> coincTimes;
+  unsigned id = 0;
+  std::unique_ptr<std::vector<sbnd::trigger::Coincidence>> coincidence_v = std::make_unique<std::vector<sbnd::trigger::Coincidence>>();
+  for(auto it = CRTTimes.begin(); it != CRTTimes.end(); it++) {
+    for(auto jt = it; jt!=CRTTimes.end(); jt++) {
+      if(jt==it) continue;
+      if(jt->first > it->first + (fCoincidenceWindow / 8)) break;
+      if((it->second == 7 && jt->second != 7)) {
+        coincTimes.insert(std::pair<int, unsigned>(it->first, jt->second*10 + it->second));
+        coincidence_v->push_back(sbnd::trigger::Coincidence(id,
+                                                        jt->second*10 + it->second,
+							(float)it->first / 125. -1510.,
+                                                        (float)it->first / 125. -1510.));
+        id++;
+      } else if(it->second != 7 && jt->second == 7) {
+        coincTimes.insert(std::pair<int, unsigned>(jt->first, it->second*10 + jt->second));
+        coincidence_v->push_back(sbnd::trigger::Coincidence(id,
+                                                        it->second*10 + jt->second,
+                                                        (float)it->first / 125. -1510.,
+                                                        (float)jt->first / 125. -1510.));
+        id++;
+      }
+    }
+  }
+
+  e.put(std::move(coincidence_v));
   if (fVerbose) std::cout << "Number of PMT hardware triggers found: " << triggerIndex.size() << std::endl; 
   
   // fragments vector
@@ -290,16 +365,16 @@ void sbnd::trigger::pmtArtdaqFragmentProducer::produce(art::Event& e)
   uint32_t eventSizeVal = ((wfm_length * (nChannelsFrag+1)) * sizeof(uint16_t) + sizeof(sbndaq::CAENV1730EventHeader)) / sizeof(uint32_t);
   
   // loop over PMT hardware triggers
-  for (auto wvfIdx : triggerIndex) {
+  for (auto coinc : coincTimes) {
 
     // index in full waveform, 2ns tick
-    size_t trigIdx = wvfIdx*4;
-    // size_t startIdx = trigIdx-500; // -1us
-    size_t startIdx = abs(fMinStartTime)*1000/2 + trigIdx-500;
+    size_t trigIdx = coinc.first *4;
+    // size_t startIdx = trigIdx-500); // -1us
+    size_t startIdx = trigIdx-500;
 
     // determine and set timestamp for particular trigger
     // double triggerTime = fMinStartTime + wvfIdx*0.008; // in us
-    double triggerTime = wvfIdx*0.008; // in us
+    double triggerTime = coinc.first *0.008; // in us
     double timestampVal = 0.5 + (triggerTime*1e-6); // in seconds // std::time(nullptr); // current time
     metadata.timeStampSec = (uint32_t)timestampVal;
     metadata.timeStampNSec = (uint32_t)(timestampVal*1e9);
@@ -343,7 +418,7 @@ void sbnd::trigger::pmtArtdaqFragmentProducer::produce(art::Event& e)
 
       // create add beam window trigger waveform
       ch_offset = (size_t)(nChannelsFrag*wfm_length);
-      size_t beamStartIdx = abs(fMinStartTime)*1000/2;
+      size_t beamStartIdx = 0;
       size_t beamEndIdx = beamStartIdx + fBeamWindowLength*1000/2;
       // loop over waveform
       for (size_t i_t = 0; i_t < wfm_length; i_t++) {
@@ -367,6 +442,63 @@ void sbnd::trigger::pmtArtdaqFragmentProducer::produce(art::Event& e)
   // clear variables
   wvf_channel.clear();
   wvf_channel.shrink_to_fit();
+}
+
+void sbnd::trigger::pmtArtdaqFragmentProducer::getCRTTimeStamps(
+  art::Event& e,
+  std::map<int, unsigned>& coincTimeStamps)
+{
+  std::map<int, unsigned> fragTimeStamps;
+
+  // Access CRT Fragments
+  art::Handle< std::vector<artdaq::Fragment> > crtHandle;
+  std::vector< art::Ptr<artdaq::Fragment> > crtVect;
+  if(e.getByLabel(fCRTFragLabel, crtHandle))     // Make sure artHandle is from mo$
+    art::fill_ptr_vector(crtVect, crtHandle);
+
+  // use  fragment ID to get plane information
+  for(auto& frag : crtVect) {
+    sbndaq::BernCRTFragmentV2 bern_fragment(*(frag));
+    const sbndaq::BernCRTFragmentMetadataV2* md = bern_fragment.metadata();
+    auto thisone = frag->fragmentID();  uint plane = (thisone & 0x0700) >> 8;
+    if (plane>7) {std::cout << "bad plane value " << plane << std::endl; plane=0;}
+    // Check if this fragment is considered in the coincidence check
+    for(unsigned int iHit = 0; iHit < md->hits_in_fragment(); iHit++) {
+      sbndaq::BernCRTHitV2 const* bevt = bern_fragment.eventdata(iHit);
+      // require that this is data and not clock reset (0xC), and that the ts1 time is valid (0x2)
+      auto thisflag = bevt->flags;
+      if (thisflag & 0x2 && !(thisflag & 0xC) ) {
+        auto thistime = (((bevt->ts1 - fCRTTriggerOffset) / fCRTClockFreq) - fMinStartTime)*1000.;
+        std::cout << (bevt->ts1 - fCRTTriggerOffset) / fCRTClockFreq + (fMinStartTime)*1000.<< "\n";
+        if(thistime >= 0.) fragTimeStamps.insert(std::pair<int, unsigned>((int)(thistime / 8.), plane));
+      }
+    }
+  }
+
+  // Only select times with coincident CRTs from fhicl
+  for(auto hit_it=fragTimeStamps.begin(); hit_it != fragTimeStamps.end(); hit_it++) {
+    if(std::distance(fragTimeStamps.begin(), hit_it) >= (int)fragTimeStamps.size()) break;
+    int n_hits=0;
+    std::vector<unsigned> cur_coinc(7); cur_coinc[hit_it->second] = 1;
+    for(auto hit_jt = hit_it; hit_jt != fragTimeStamps.end(); hit_jt++) {
+      if(hit_jt->first > hit_it->first + fCoincidenceWindow) break;
+      if(hit_it==hit_jt)continue;
+      n_hits++;
+      cur_coinc[hit_jt->second] = 1;
+    }
+    int coinc_int = 0;
+    for(unsigned i=0; i<7; i++) {
+      if(cur_coinc[i]==1) {coinc_int *= 10; coinc_int += i;}
+    }
+    for(auto& coinc_vec : fCRTCoincidence) {
+      if(coinc_vec==cur_coinc) {
+        coincTimeStamps.insert(std::pair<int, unsigned>(hit_it->first, coinc_int));
+        break;
+      }
+    }
+    std::advance(hit_it, n_hits);
+  }
+
 }
 
 DEFINE_ART_MODULE(sbnd::trigger::pmtArtdaqFragmentProducer)

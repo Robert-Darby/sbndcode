@@ -1,0 +1,83 @@
+#include "services_sbnd.fcl"
+#include "messages_sbnd.fcl"
+#include "sam_sbnd.fcl"
+#include "larfft_sbnd.fcl"
+#include "signalservices_sbnd.fcl"
+#include "simulationservices_sbnd.fcl"
+#include "detsimmodules_sbnd.fcl"
+#include "opdetdigitizer_sbnd.fcl"
+#include "ophit_finder_sbnd.fcl"
+#include "TPCChannelMapService.fcl"
+
+#include "pmtArtdaqFragmentProducer.fcl"
+#include "CRTArtdaqFragmentProducer.fcl"
+#include "pmttriggerproducer.fcl"
+#include "pmtsoftwaretriggerproducer.fcl"
+
+process_name: FilterTrigger
+
+services:
+{
+  TFileService: { fileName: "reco_hist.root"}
+  @table::sbnd_detsim_services
+  LArFFT:                    @local::sbnd_larfft 
+  MemoryTracker:     {}
+  TimeTracker:       {}
+  RandomNumberGenerator: {} 
+  message:              @local::sbnd_message_services_prod_debug
+  FileCatalogMetadata:  @local::art_file_catalog_mc
+  TPCChannelMapService: @local::SBNDTPCChannelMapServiceDefaults
+  AuxDetExptGeoHelperInterface: { service_provider: "sbndcode/CRT/CRTGeometryHelper" }
+  ExptGeoHelperInterface:    @local::sbnd_geometry_helper
+  Geometry:                  @local::sbnd_geo
+  GeometryConfigurationWriter:    {}
+  @table::sbnd_basic_services
+  @table::sbnd_random_services
+}
+
+source:
+{
+  module_type: RootInput
+  maxEvents:  -1
+}
+
+outputs:
+{
+ out1:
+ {
+   module_type: RootOutput
+   fileName:    "%ifb_filtered.root"
+   dataTier:    "filtered"
+   fastCloning: true
+   SelectEvents: [ filter ]
+ }
+}
+
+physics:
+{
+  filters:
+  {
+    filterchoppy: {
+      module_type: FilterChoppy
+    }
+    filterpmt: {
+      module_type: PMTWaveformFilter
+    }
+  }
+  producers: {
+    crtfragmentProducer: @local::CRTArtdaqFragmentProducer
+    pmttriggerProducer: @local::pmtTriggerProducer
+    pmtfragmentProducer: @local::pmtArtdaqFragmentProducer
+    pmtsoftware: @local::pmtSoftwareTriggerProducer
+  }
+
+  filter: [ filterchoppy, filterpmt, crtfragmentProducer, pmttriggerProducer, pmtfragmentProducer, pmtsoftware ]
+  stream1:  [ out1 ]
+  trigger_paths: [ filter ]
+  end_paths:     [ stream1 ]
+}
+
+physics.producers.crtfragmentProducer.Verbose: false
+physics.producers.pmttriggerProducer.Verbose: false
+physics.producers.pmttriggerProducer.Verbose: false
+physics.producers.pmtsoftware.Verbose: false

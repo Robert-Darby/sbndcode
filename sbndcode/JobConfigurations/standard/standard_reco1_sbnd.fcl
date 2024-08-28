@@ -16,6 +16,6 @@
 process_name: Reco1
 
 physics.trigger_paths: [ reco1 ]
-physics.end_paths: [stream1, superaana]
+physics.end_paths: [stream1, superaana, latelightana]
 
 

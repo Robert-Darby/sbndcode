@@ -8,7 +8,7 @@
 #include "pmtArtdaqFragmentProducer.fcl"
 #include "CRTArtdaqFragmentProducer.fcl"
 #include "pmttriggerproducer.fcl"
-#include "artdaqfragmentproducer.fcl"
+#include "pmtsoftwaretriggerproducer.fcl"
 
 process_name:FragmentProducer
 
@@ -26,41 +26,42 @@ source:
   maxEvents:  -1        # Number of events to create                                                              
 }
 
-outputs:
-{
- out1:
- {
-   @table::sbnd_rootoutput
-   fastCloning: true
- }
-}
-
 physics:
 {
 
  producers:
  {
-  pmttriggerproducer: @local::pmtTriggerProducer
-  pmtfragmentProducer: @local::pmtArtdaqFragmentProducer
-  fragmentProducer: @local::ArtdaqFragmentProducer
   crtfragmentProducer: @local::CRTArtdaqFragmentProducer
+  pmttriggerProducer: @local::pmtTriggerProducer
+  pmtfragmentProducer: @local::pmtArtdaqFragmentProducer
+  pmtsoftware: @local::pmtSoftwareTriggerProducer
  }
 
- processwvfms: [pmttriggerproducer, fragmentProducer]
+ processwvfms: [crtfragmentProducer, pmttriggerProducer, pmtfragmentProducer, pmtsoftware]
  
  stream1: [ out1 ]
-
- trigger_paths: [ processwvfms ]
 
  end_paths: [ stream1 ]
 
 }
 
-physics.producers.fragmentProducer.MultiplicityThreshold: 10
-physics.producers.fragmentProducer.BeamWindowLength: 1.8
+outputs: {
+  out1: {
+    @table::sbnd_rootoutput
+    dataTier: "simulated"
+    outputCommands: ["keep *_*_*_*",
+                     "drop artdaq::Fragments_*_*_*"]
+  }
+}
 
-physics.producers.fragmentProducer.ClockSpeedCRT: @local::sbnd_crtsim.DetSimParams.ClockSpeedCRT
+physics.trigger_paths: [ processwvfms ]
 
-physics.producers.pmttriggerproducer.Verbose: true
+physics.producers.crtfragmentProducer.Verbose: false
+physics.producers.pmttriggerProducer.Verbose: false
+physics.producers.pmtfragmentProducer.Verbose: false
+physics.producers.fragmentProducer.Verbose: false
+physics.producers.crtfragmentProducer.Verbose: false
+
+# physics.producers.pmttriggerProducer.Verbose: true
 # physics.producers.pmttriggerproducer.WindowStart: -1510.0
 # physics.producers.pmttriggerproducer.WindowEnd: 1510.0

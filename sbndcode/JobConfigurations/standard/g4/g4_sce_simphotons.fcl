@@ -1,0 +1,4 @@
+#include "g4_sce_lite.fcl"
+
+physics.producers.pdfastsim.UseLitePhotons: false
+physics.producers.pdfastsimout.UseLitePhotons: false

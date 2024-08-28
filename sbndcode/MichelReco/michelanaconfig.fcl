@@ -30,5 +30,13 @@ analyseMichels:
   RecombinationFactor:	6.4e-1
   UseTrack:		true
   UseShower:		true
+
+  SoftwareTriggerLabel: "pmtsoftware"
+  CoincidenceLabel:     "pmtfragmentProducer"
+
+  OpHitLabels: ["ophitpmt", "ophitxarapuca"]
+  OpHitDelays: [0.135, 0.]
+  SimPhotonsLabel:	["pdfastsim", "pdfastsimout"]
+  MaMOpHTLabel: "waveformAnalyzer"
 }
 END_PROLOG

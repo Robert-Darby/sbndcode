@@ -54,7 +54,7 @@
 #include "mlreco_sbnd.fcl"
 #include "cluster_sbnd.fcl"
 
-
+#include "latelight_config.fcl"
 process_name: Reco
 
 services:
@@ -200,6 +200,7 @@ physics:
 
  #define the producer and filter modules for this path, order matters,
  #filters reject all following items.  see lines starting physics.producers below
+
  reco1: [ rns
          , opdecopmt
          , opdecoxarapuca
@@ -252,6 +253,7 @@ physics:
  # Run caloskimmer to produce ntuples for calibration as part of reco2 chain
 
  analyzers:{
+  latelight: @local::LateLightAnalyser
   caloskim: @local::caloskim_nodigits_goldentracks
   crtskim: @local::crtskim_sbnd
   pmtskim: @local::pmtskim_sbnd
@@ -259,6 +261,7 @@ physics:
   superampvmpr: @local::sbnd_supera_mpvmpr
  }
 
+ latelightana: [ latelight ]
  caloskimana: [ caloskim, crtskim, pmtskim ]
  superaana: [ supera ] #outputs larcv.root for use in mlreco
 

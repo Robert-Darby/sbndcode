@@ -80,6 +80,8 @@
 
 // C++ includes
 #include <algorithm>
+#include<complex>
+#include <iostream>
 #include <vector>
 #include <cmath>
 #include <memory>
@@ -144,6 +146,7 @@ private:
    double fWindowEnd; //end time (in us) of trigger window (set in fcl, 1.6 for beam spill)
    std::string fInputModuleName; //opdet waveform module name (set in fcl)
    std::vector<std::string> fOpDetsToPlot = {"pmt_coated", "pmt_uncoated"}; //types of optical detetcors (e.g. "pmt_coated", "xarapuca_vuv", etc.), should only be pmt_coated and pmt_uncoated (set in fcl)
+   std::string fWaveformInstanceName = "PMTChannels";
    bool fSaveHists; //save raw, binary, etc. histograms (set in fcl)
    std::vector<int> fEvHists = {1,2,3}; //if fSaveHists=true, which event hists to save? (set in fcl)
    bool fVerbose; //true=output all cout statements, false=no non-error cout statements (set in fcl)
@@ -169,6 +172,7 @@ void pmtTriggerProducer::reconfigure(fhicl::ParameterSet const & p)
    // Initialize member data here
    fInputModuleName = p.get< std::string >("InputModule", "opdaq");
    fOpDetsToPlot    = p.get<std::vector<std::string> >("OpDetsToPlot");
+   fWaveformInstanceName = p.get<std::string>("WaveformInstanceName");
    fIndividualThresholds = p.get<bool>("IndividualThresholds",false);
    fThreshold       = p.get<std::vector<double> >("Threshold");
    fOVTHRWidth        = p.get<int>("OVTHRWidth",11);
@@ -197,11 +201,30 @@ void pmtTriggerProducer::produce(art::Event & e)
    subrun = e.subRun();
    event = e.id().event();
 
-   art::Handle< std::vector< raw::OpDetWaveform > > waveHandle;
-   e.getByLabel(fInputModuleName, waveHandle);
 
-   if(!waveHandle.isValid()) {
-      std::cout << Form("Did not find any G4 photons from a producer: %s", "largeant") << std::endl;
+   std::vector<art::Handle<std::vector<raw::OpDetWaveform>>> waveformHandles = e.getMany<std::vector<raw::OpDetWaveform>>();
+   std::cout << "\n\n\n Module Initialised \n";
+
+   std::string wv_name = fWaveformInstanceName;
+   waveformHandles.erase(
+     std::remove_if(waveformHandles.begin(), waveformHandles.end(),
+            [&wv_name](const art::Handle<std::vector<raw::OpDetWaveform>>& handle) {
+                if (handle.isValid()) {
+                    auto const& prov = handle.provenance();
+                    return prov->productInstanceName() != wv_name;}
+                return false;}),
+     waveformHandles.end());
+
+   std::cout << "Handles found: " << waveformHandles.size() << "\n";
+   for(auto& handle : waveformHandles) {
+     if(!handle.isValid()) {
+       std::cout << Form("Did not find any G4 photons from a producer: %s", "largeant") << std::endl;
+     }
+     auto prov  = handle.provenance();
+     if(handle->size()==0) {
+       std::cout << "No waveforms in handle: " << prov->moduleLabel() << "\n";
+     }
+     std::cout << prov->moduleLabel() << "  " << prov->productInstanceName() << "  " << handle->size() << "\n";
    }
 
   //  // example of usage for pdMap.getCollectionWithProperty()
@@ -248,18 +271,21 @@ void pmtTriggerProducer::produce(art::Event & e)
    }
 
    //find min and max start and end times to initialize all vectors to same full waveform length
-   double fMinStartTime = -1510.0;//in us
+   double fMinStartTime = std::numeric_limits<double>::max();//in us
    double fMaxEndTime = 1510.0;//in us
 
-   for(auto const& wvf : (*waveHandle)) {
+  for(auto& handle : waveformHandles) {
+   for(auto const& wvf : (*handle)) {
      fChNumber = wvf.ChannelNumber();
      opdetType = pdMap.pdType(fChNumber);
      if (std::find(fOpDetsToPlot.begin(), fOpDetsToPlot.end(), opdetType) == fOpDetsToPlot.end()) {continue;}
      if (wvf.TimeStamp() < fMinStartTime){ fMinStartTime = wvf.TimeStamp(); }
      if ((double(wvf.size()) / fSampling + wvf.TimeStamp()) > fMaxEndTime){ fMaxEndTime = double(wvf.size()) / fSampling + wvf.TimeStamp();}
+   }
   }
-  if (fVerbose){std::cout<<"MinStartTime: "<<fMinStartTime<<" MaxEndTime: "<<fMaxEndTime<<std::endl;}
+  if (fVerbose){std::cout<<"MinStartTime: "<<fMinStartTime<<" MaxEndTime: "<< fMaxEndTime<< " Duration: " << fMaxEndTime - fMinStartTime << std::endl;}
 
+   if(waveformHandles[0]->empty()) fMinStartTime = -1510.;
    wvf_bin_0.reserve(int((fMaxEndTime-fMinStartTime)/(1./fSampling)));
    channel_bin_wvfs.reserve(120);
    paired.reserve(fPair1.size());
@@ -291,7 +317,9 @@ void pmtTriggerProducer::produce(art::Event & e)
 
    size_t wvf_id = -1;
    int hist_id = -1;
-   for(auto const& wvf : (*waveHandle)) {
+  std::cout << "Found PMT pairs";
+  for(auto& handle : waveformHandles) {
+   for(auto const& wvf : (*handle)) {
       wvf_id++;
       hist_id++;
       fChNumber = wvf.ChannelNumber();
@@ -371,10 +399,10 @@ void pmtTriggerProducer::produce(art::Event & e)
       }
       wvf_bin.clear();
       wvf_bin.shrink_to_fit();
-      waveHandle.clear();
 
    }//wave handle loop
-
+  } // handles loop
+  std::cout << "Created waveforms\n";
      int wvf_num = -1;
 
      for (auto wvf_bin : channel_bin_wvfs){ // wvf_bin is a vector with entries making up the wvf, one for every channel
@@ -540,7 +568,7 @@ void pmtTriggerProducer::produce(art::Event & e)
      }
 
    }
-
+  std::cout << "Found mult waveform \n";
 
   if (i_ev!=-1 && i_ev<3){
    histname.str(std::string());
@@ -553,16 +581,21 @@ void pmtTriggerProducer::produce(art::Event & e)
      passedHist->SetBinContent(i + 1, passed_trigger[i]);
    }
  }
+  std::cout << "Produced mult hist \n";
 
   sbnd::comm::pmtTrigger pmt_time;
 
-   for (int pmts: passed_trigger){
-     pmt_time.numPassed.push_back(pmts);
-     if (pmts > max_passed) max_passed = pmts;
+   if(!waveformHandles[0]->empty()) {
+      std::cout << "There are waveforms\n";
+      for (int pmts: passed_trigger){
+        pmt_time.numPassed.push_back(pmts);
+        if (pmts > max_passed) max_passed = pmts;
+      }
+      pmt_time.maxPMTs = max_passed;
+      std::cout << "Trigger filled \n";
    }
-   pmt_time.maxPMTs = max_passed;
    pmts_passed->push_back(pmt_time);
-
+   std::cout << "Trigger added to vector\n";
    if (fVerbose){std::cout << "Length of passed trigger: "  << pmt_time.numPassed.size() << std::endl;}
    if (fVerbose){std::cout << "Max number of PMTs passed: " << pmt_time.maxPMTs << std::endl;}
 
@@ -572,7 +605,7 @@ void pmtTriggerProducer::produce(art::Event & e)
    // evt.put(std::move(muon_tracks_assn));
 
    e.put(std::move(pmts_passed));
-
+   std::cout << "Vector added to event \n";
    //clear variables
    passed_trigger.clear();
    passed_trigger.shrink_to_fit();

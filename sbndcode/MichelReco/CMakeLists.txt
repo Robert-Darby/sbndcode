@@ -8,7 +8,7 @@ set(      MODULE_LIBRARIES larcorealg::Geometry
                            larevt::Filters
                            lardataobj::RawData
                            lardataobj::RecoBase
-			   larreco::Calorimetry
+			                larreco::Calorimetry
                            larreco::RecoAlg
                            lardata::RecoObjects
                            larpandora::LArPandoraInterface
@@ -24,6 +24,12 @@ set(      MODULE_LIBRARIES larcorealg::Geometry
                            art::Persistency_Common
                            art::Persistency_Provenance
                            art::Utilities
+        	            artdaq_core::artdaq-core_Data
+	                    artdaq_core::artdaq-core_Utilities
+                	    sbndaq_artdaq_core::sbndaq-artdaq-core_Overlays
+	                    sbndaq_artdaq_core::sbndaq-artdaq-core_Overlays_Common
+        	            sbndaq_artdaq_core::sbndaq-artdaq-core_Obj_SBND
+ 
                            messagefacility::MF_MessageLogger
                            ROOT::Core
                            ROOT::Tree
@@ -32,10 +38,12 @@ set(      MODULE_LIBRARIES larcorealg::Geometry
                            ROOT::XMLIO
                            ROOT::Gdml
                            sbndcode_RecoUtils
-                           sbndcode_OpDetSim
-        )
+                           sbndcode_OpDetSim)
+
 # cet_build_plugin(AnalyzeMichels art::Module SOURCE AnalyzeMichels_module.cc LIBRARIES ${MODULE_LIBRARIES} )
 cet_build_plugin(AnalyseMichels art::Module SOURCE AnalyseMichels_module.cc LIBRARIES ${MODULE_LIBRARIES} )
+cet_build_plugin(MaMOpHT art::Module SOURCE MaMOpHT_module.cc LIBRARIES ${MODULE_LIBRARIES} )
+cet_build_plugin(LateLightAnalyser art::Module SOURCE LateLightAnalyser_module.cc LIBRARIES ${MODULE_LIBRARIES} )
 # install_headers()
 install_fhicl()
 install_source()

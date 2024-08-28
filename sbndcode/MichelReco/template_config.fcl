@@ -1,0 +1,7 @@
+BEGIN_PROLOG
+
+moduleDict:
+{
+  module_type:      	"ModuleName"
+}
+END_PROLOG

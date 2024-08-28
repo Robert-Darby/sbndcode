@@ -60,6 +60,12 @@
 #include "lardataobj/RecoBase/Cluster.h"
 #include "lardataobj/RecoBase/PFParticle.h"
 
+#include "sbndaq-artdaq-core/Obj/SBND/pmtSoftwareTrigger.hh"
+#include "sbndaq-artdaq-core/Obj/SBND/Coincidence.hh"
+
+#include "lardataobj/RecoBase/OpHit.h"
+#include "lardataobj/Simulation/SimPhotons.h"
+
 // ROOT includes
 #include <TH1F.h>
 #include <TTree.h>
@@ -102,10 +108,13 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
 
   void ResetVars();
 
-  void FillMC(const art::Ptr<simb::MCParticle>& mcp, std::vector<art::Ptr<simb::MCParticle>>& mctruthVect);
+  void FillMC(const art::Ptr<simb::MCParticle>& mcp, const art::Event& e, std::vector<art::Ptr<simb::MCParticle>>& mctruthVect);
   void FindRecoMichelShower(const art::Event& e);
   void FindRecoMichelTrack(const art::Event& e);
   void FindRecoMichel(const art::Event& e);
+  void FillTrigTree(const art::Event& e);
+  void FillPulseTree(const art::Event& e);
+  void MatchMCRecoLight(const art::Event& e);
 
   // Create out output tree
   TTree* fTree;
@@ -132,6 +141,7 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
 
 
   // Event Variables
+  int fRun, fSubRun;
   int fEventID;
   int fNPFParticles;
   std::vector<int> fPFParticlePDG;
@@ -179,9 +189,13 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   float fMCMichelStartX;
   float fMCMichelStartY;
   float fMCMichelStartZ;
+  float fMCMichelStartT;
   float fMCMichelRelAngle;
   int fMCMichelNPoints;
   float fMCMichelEnergyFrac;		// Fraction of end MC muon energy taken by michel
+  std::string fMCMichelStartProcess;
+  float fMCMichelMamophtTime;
+  int fMCMichelMamophtADC;
 
   float fPurity;
   float fCompleteness;
@@ -299,14 +313,26 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   float fMCMuonEndX;
   float fMCMuonEndY;
   float fMCMuonEndZ;
+  float fMCMuonEndT;
+  bool fMCMuonStopping;
   float fMCMuonEndEnergy;
   float fMCMuonEndPx;
   float fMCMuonEndPy;
   float fMCMuonEndPz;
+  float fMCMuonGenX, fMCMuonGenY, fMCMuonGenZ, fMCMuonGenE;
+  float fMCMuonTime;
   float fMCMuonStartX;
   float fMCMuonStartY;
   float fMCMuonStartZ;
+  float fMCMuonStartT;
   float fMCMuonBendiness;
+  bool fMCMuonTrigger;
+  unsigned fMCMuonTriggerID;
+  float fMCMuonMinDist;
+  bool fMCMuonEntersTPC;
+  std::string fMCMuonEndProcess;
+  float fMCMuonMamophtTime;
+  int fMCMuonMamophtADC;
 
   // Reco Muon
   int fNRecoMuonHits;
@@ -345,6 +371,32 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
 
   calo::CalorimetryAlg fCalorimetryAlg;
 
+
+  // SoftwareTrigger Waveforms
+  TTree* fTrigTree;
+  int fTrigID;
+  float fTrigTime;
+  std::vector<int> fTrigMultVec;
+  std::vector<float> fTrigADCVec, fTrigADCRiseVec;
+  unsigned fCoincID;
+  int fCoincPlanes;
+  float fCoincCRTTime, fCoincPMTTime;
+
+  // Pulses
+  TTree* fPulseTree;
+  int fPulseTriggerID;
+  std::vector<int> fPulseCh;
+  std::vector<float> fPulseChBaseline, fPulseChBaselineSigma;
+  std::vector<float> fPulsePeak, fPulseArea, fPulseTStart, fPulseTPeak, fPulseTEnd, fPulsePE;
+
+
+  // Light Matching Tree
+  TTree* fOpTree;
+  std::vector<int> fOpCh;
+  std::vector<float> fRecoMichelPhotons, fRecoMuonPhotons;
+  std::vector<float> fMCMichelPhotons, fMCMuonPhotons;
+  std::vector<unsigned> fRecoMichelNOpHits, fRecoMuonNOpHits;
+
   // Temporary variables
   int countpfps;
   std::string lastchar;
@@ -368,8 +420,14 @@ class sbnd::AnalyseMichels : public art::EDAnalyzer {
   const bool fUseTrack;
   const bool fUseShower;
 
+  const std::string fSoftwareTriggerLabel;
+  const std::string fCoincidenceLabel;
+
+  const std::vector<std::string> fOpHitLabels;
+  const std::vector<float> fOpHitDelays;
+  const std::vector<std::string> fSimPhotonsLabel;
+  const std::string fMaMOpHTLabel;
   // Declare member data here.
-  void FillMC(art::Ptr<simb::MCParticle>& mcp, std::vector<art::Ptr<simb::MCParticle>>& mctruthVect);
     // BackTrackerService
 //    art::ServiceHandle<cheat::BackTrackerService> bt_serv;
 };
@@ -395,6 +453,12 @@ sbnd::AnalyseMichels::AnalyseMichels(fhicl::ParameterSet const& p)
   , fRecombinationFactor(p.get<float>("RecombinationFactor"))
   , fUseTrack(p.get<bool>("UseTrack"))
   , fUseShower(p.get<bool>("UseShower"))
+  , fSoftwareTriggerLabel(p.get<std::string>("SoftwareTriggerLabel"))
+  , fCoincidenceLabel(p.get<std::string>("CoincidenceLabel"))
+  , fOpHitLabels(p.get<std::vector<std::string>>("OpHitLabels"))
+  , fOpHitDelays(p.get<std::vector<float>>("OpHitDelays"))
+  , fSimPhotonsLabel(p.get<std::vector<std::string>>("SimPhotonsLabel"))
+  , fMaMOpHTLabel(p.get<std::string>("MaMOpHTLabel"))
 {
   // Call appropriate consumes<>() for any products to be retrieved by this module.
 }
@@ -413,9 +477,9 @@ void sbnd::AnalyseMichels::rotateVector(TVector3 *vector) {
 void sbnd::AnalyseMichels::analyze(art::Event const& e)
 {
   // Implementation of required member function here.
+  fRun = e.run(); fSubRun = e.subRun();
   fEventID = e.id().event();
 
-// std::cout << __FILE__ << "::" << __func__ << "():[" << __LINE__ << "]\t\n";
 
   // Load the PFParticles from pandora
   art::Handle<std::vector<recob::PFParticle>> pfpHandle;
@@ -472,20 +536,26 @@ void sbnd::AnalyseMichels::analyze(art::Event const& e)
     fMCPDG.push_back(mcp->PdgCode());
     fMCTrackID.push_back(mcp->TrackId());
   }
-//std::cout << __FILE__ << "::" << __func__ << "():[" << __LINE__ << "]\t\n";
    
-  // Get ID of Michel - always the last electron
-
+  // Get G4ID of stopping muons
+  std::vector<int> muon_ids;
+  for(auto const mcp : mctruthVect) {
+    if(abs(mcp->PdgCode()) != 13) continue;
+    muon_ids.push_back(mcp->TrackId());
+  }
   for(auto const &mcp: mctruthVect) {
-    if(abs(mcp->PdgCode()) != 13 || abs(mcp->EndX()) > 200. || abs(mcp->EndY()) > 200. || mcp->EndZ() < 0. || mcp->EndZ() > 500.) continue;
+    if(std::find(muon_ids.begin(), muon_ids.end(), mcp->TrackId()) == muon_ids.end()) continue;
     ResetVars();
-    FillMC(mcp, mctruthVect);
-    if(fMCMichelID == 0) continue;
+    FillMC(mcp, e, mctruthVect);
+    // if(fMCMichelID == 0) continue;
     FindRecoMichel(e);
     if(fIsShower) FindRecoMichelShower(e);
     else if(fIsTrack) FindRecoMichelTrack(e);
+    MatchMCRecoLight(e);
     fTree->Fill();
   }
+  FillTrigTree(e);
+  FillPulseTree(e);
 }
 
 void sbnd::AnalyseMichels::beginJob()
@@ -498,6 +568,8 @@ void sbnd::AnalyseMichels::beginJob()
 
   // Add branches to the TTree
   // Event
+  fTree->Branch("run",				&fRun);
+  fTree->Branch("sub,				&fSubRun");
   fTree->Branch("event.ID", 			&fEventID);
   fTree->Branch("event.NPFParticles", 		&fNPFParticles);
   fTree->Branch("event.PFParticlePDG", 		&fPFParticlePDG);
@@ -543,14 +615,18 @@ void sbnd::AnalyseMichels::beginJob()
   fTree->Branch("mcMichel.RelPhi", 		&fMCMichelRelPhi);
   fTree->Branch("mcMichel.Vect", 		&fMCMichelVect);
   fTree->Branch("mcMichel.Length", 		&fMCMichelLength);
+  fTree->Branch("mcMichel.StartT",    &fMCMichelStartT);
   fTree->Branch("mcMichel.StartX",		&fMCMichelStartX);
   fTree->Branch("mcMichel.StartY",		&fMCMichelStartY);
   fTree->Branch("mcMichel.StartZ",		&fMCMichelStartZ);
   fTree->Branch("mcMichel.RelAngle",		&fMCMichelRelAngle);
   fTree->Branch("mcMichel.NPoints",		&fMCMichelNPoints);
   fTree->Branch("mcMichel.EnergyFrac",		&fMCMichelEnergyFrac);
-
-  // Reco Michel
+  fTree->Branch("mcMichel.Process",		&fMCMichelStartProcess);
+  fTree->Branch("mcMichel.MamophtTime",		&fMCMichelMamophtTime);
+  fTree->Branch("mcMichel.MamophtADC",          &fMCMichelMamophtADC);
+ 
+ // Reco Michel
   fTree->Branch("recoMichel.NHits", 		&fNHitsInRecoMichel);
   fTree->Branch("recoMichel.TotalHits", 	&fNTotalMichelHits);
   fTree->Branch("recoMichel.NShowers", 		&fNShowers);
@@ -664,14 +740,28 @@ void sbnd::AnalyseMichels::beginJob()
   fTree->Branch("mcMuon.EndX",			&fMCMuonEndX);
   fTree->Branch("mcMuon.EndY",			&fMCMuonEndY);
   fTree->Branch("mcMuon.EndZ",			&fMCMuonEndZ);
+  fTree->Branch("mcMuon.EndT",      &fMCMuonEndT);
+  fTree->Branch("mcMuon.Stopping",   &fMCMuonStopping);
   fTree->Branch("mcMuon.EndEnergy",		&fMCMuonEndEnergy);
   fTree->Branch("mcMuon.EndPx",			&fMCMuonEndPx);
   fTree->Branch("mcMuon.EndPy",			&fMCMuonEndPy);
   fTree->Branch("mcMuon.EndPz",			&fMCMuonEndPz);
+  fTree->Branch("mcMuon.T",		&fMCMuonTime);
+  fTree->Branch("mcMuon.GenX",		&fMCMuonGenX);
+  fTree->Branch("mcMuon.GenY",		&fMCMuonGenY);
+  fTree->Branch("mcMuon.GenZ",		&fMCMuonGenZ);
+  fTree->Branch("mcMuon.GenE",    &fMCMuonGenE);
   fTree->Branch("mcMuon.StartX",		&fMCMuonStartX);
   fTree->Branch("mcMuon.StartY",		&fMCMuonStartY);
   fTree->Branch("mcMuon.StartZ",		&fMCMuonStartZ);
   fTree->Branch("mcMuon.Bendiness",		&fMCMuonBendiness);
+  fTree->Branch("mcMuon.Trigger",		&fMCMuonTrigger);
+  fTree->Branch("mcMuon.TriggerID",		&fMCMuonTriggerID);
+  fTree->Branch("mcMuon.EndProcess",		&fMCMuonEndProcess);
+  fTree->Branch("mcMuon.EntersTPC",		&fMCMuonEntersTPC);
+  fTree->Branch("mcMuon.MinDist",		&fMCMuonMinDist);
+  fTree->Branch("mcMuonMamophtTime",          &fMCMuonMamophtTime);
+  fTree->Branch("mcMuonMamophtADC",          &fMCMuonMamophtADC);
 
   // Reco Muon
   fTree->Branch("recoMuon,NHits",		&fNRecoMuonHits);
@@ -712,6 +802,49 @@ void sbnd::AnalyseMichels::beginJob()
   fTree->Branch("countpfpf",				&countpfps);
   fTree->Branch("lastchar",				&lastchar);
 
+  fTrigTree = tfs->make<TTree>("trig_tree", "Output Tree");
+  fTrigTree->Branch("run",		&fRun);
+  fTrigTree->Branch("sub",		&fSubRun);
+  fTrigTree->Branch("evt",		&fEventID);
+  fTrigTree->Branch("id",		&fTrigID);
+  fTrigTree->Branch("trig_time",	&fTrigTime);
+  fTrigTree->Branch("mult_vec",		&fTrigMultVec);
+  fTrigTree->Branch("adc_vec",		&fTrigADCVec);
+  fTrigTree->Branch("adc_rise_vec",	&fTrigADCRiseVec);
+  fTrigTree->Branch("coinc_id",		&fCoincID);
+  fTrigTree->Branch("coinc_planes",     &fCoincPlanes);
+  fTrigTree->Branch("coinc_crttimes",   &fCoincCRTTime);
+  fTrigTree->Branch("coinc_pmttimes",   &fCoincPMTTime);
+
+  fPulseTree = tfs->make<TTree>("pulse_tree", "Output Tree");
+  fPulseTree->Branch("run",              &fRun);
+  fPulseTree->Branch("sub",              &fSubRun);
+  fPulseTree->Branch("evt",              &fEventID);
+  fPulseTree->Branch("id",               &fPulseTriggerID);
+  fPulseTree->Branch("ch",		&fPulseCh);
+  fPulseTree->Branch("ch_base",		&fPulseChBaseline);
+  fPulseTree->Branch("ch_sigma",	&fPulseChBaselineSigma);
+  fPulseTree->Branch("pulse_peak",	&fPulsePeak);
+  fPulseTree->Branch("pulse_area",	&fPulseArea);
+  fPulseTree->Branch("pulse_pe",	&fPulsePE);
+  fPulseTree->Branch("pulse_tstart",	&fPulseTStart);
+  fPulseTree->Branch("pulse_tend",	&fPulseTEnd);
+  fPulseTree->Branch("pulse_tpeak",	&fPulseTPeak);
+
+  fOpTree = tfs->make<TTree>("op_tree", "Output Tree");
+  fOpTree->Branch("run",              &fRun);
+  fOpTree->Branch("sub",              &fSubRun);
+  fOpTree->Branch("evt",              &fEventID);
+  fOpTree->Branch("muon_id",		&fMCMuonG4ID);
+  fOpTree->Branch("michel_id",		&fMCMichelID);
+  fOpTree->Branch("ch",			&fOpCh);
+  fOpTree->Branch("michel_mc_phot",		&fMCMichelPhotons);
+  fOpTree->Branch("michel_reco_phot",		&fRecoMichelPhotons);
+  fOpTree->Branch("muon_mc_phot",             &fMCMuonPhotons);
+  fOpTree->Branch("muon_reco_phot",           &fRecoMuonPhotons);
+  fOpTree->Branch("muon_nophits",		&fRecoMuonNOpHits);
+  fOpTree->Branch("michel_nophits",               &fRecoMichelNOpHits);
+
   fMCMichelEnergyHist = tfs->make<TH1D>("mcMichelEnergyHist", "Energy of MC Michels; Energy; Events", 40, 2, 1);
   fMCMuonEnergyHist = tfs->make<TH1D>("mcMuonEnergyHist", "Energy of MC muons; Energy; Events", 40, 2, 1);
   fRecoMuonEnergyHist = tfs->make<TH1D>("recoMichelEnergyHist", "Energy of reconstructed Michels; Energy; Events", 40, 2, 1);
@@ -740,7 +873,7 @@ void sbnd::AnalyseMichels::ResetVars()
   // This ensures things are not kept from the previous event
   fNPFParticles = 0;
   fNDeltas = 0;
-  fMCMichelID = 0;
+  fMCMichelID = -1;
   fNTotalMichelHits= 0;
   fNHitsInRecoMichel = 0;
   fEventNHits = 0;
@@ -765,6 +898,7 @@ void sbnd::AnalyseMichels::ResetVars()
   fMCMichelStartX = 0;
   fMCMichelStartY = 0;
   fMCMichelStartZ = 0;
+  fMCMichelStartT = 0.;
   fRecoMichelStartX = 0;
   fRecoMichelStartY = 0;
   fRecoMichelStartZ = 0;
@@ -773,6 +907,8 @@ void sbnd::AnalyseMichels::ResetVars()
   fMCMuonEndX = 0;
   fMCMuonEndY = 0;
   fMCMuonEndZ = 0;
+  fMCMuonEndT = 0.;
+  fMCMuonStopping = false;
   fRecoMuonStartX = 0;
   fRecoMuonStartY = 0;
   fRecoMuonStartZ = 0;
@@ -812,9 +948,11 @@ void sbnd::AnalyseMichels::ResetVars()
   fMCMuonEndPx = 0;
   fMCMuonEndPy = 0;
   fMCMuonEndPz = 0;
-  fMCMuonStartX = 0;
+  fMCMuonGenX = 0.; fMCMuonGenY = 0.; fMCMuonGenZ= 0.; fMCMuonGenE = -9999.;
+  fMCMuonTime = 10000.;
+  fMCMuonStartX = 1000;
   fMCMuonStartY = 1000;
-  fMCMuonStartZ = 0;
+  fMCMuonStartZ = 1000;
   fRecoMichelCloseProximity = -1;
   fRecoMichelNClusters = 0;
   fRecoMuonNClusters = 0;
@@ -860,6 +998,12 @@ void sbnd::AnalyseMichels::ResetVars()
   fRecoMichelEPurityU = 0;
   fRecoMichelEPurityV = 0;
   fRecoMichelEPurityW = 0;
+  fMCMuonEntersTPC = false;
+  fMCMuonMinDist = 99999.;
+  fMCMuonMamophtTime = -99999.;
+  fMCMichelMamophtTime = -99999.;
+  fMCMichelMamophtADC = -9999;
+  fMCMuonMamophtADC = -9999;
   fRecoMichelPlaneIndex = {0, 1, 2};
   fRecoMichelEPurityVect = {-1, -1, -1};
   fRecoMichelEPurity = 0;
@@ -946,8 +1090,10 @@ void sbnd::AnalyseMichels::ResetVars()
 }
 
 
-void sbnd::AnalyseMichels::FillMC(const art::Ptr<simb::MCParticle>& mcp,
-                                  std::vector<art::Ptr<simb::MCParticle>>& mctruthVect)
+void sbnd::AnalyseMichels::FillMC(
+  const art::Ptr<simb::MCParticle>& mcp,
+  const art::Event& e, 
+  std::vector<art::Ptr<simb::MCParticle>>& mctruthVect)
 {
   fMCMuonPDG = mcp->PdgCode();
   fMCMuonG4ID = mcp->TrackId();
@@ -958,7 +1104,28 @@ void sbnd::AnalyseMichels::FillMC(const art::Ptr<simb::MCParticle>& mcp,
   unsigned int lastquart = 3*fNPoints/4;
   TVector3 tempvect = mcp->Position(0).Vect();
   TVector3 mcmuonend = mcp->EndPosition().Vect();
+  fMCMuonGenX = mcp->Position().X();
+  fMCMuonGenY = mcp->Position().Y();
+  fMCMuonGenZ = mcp->Position().Z();
+  fMCMuonGenE = mcp->E(0);
+  fMCMuonEndProcess = mcp->EndProcess();
 
+  float mu_trig_time = mcp->T() / 1000.;
+  for(int pos=0;pos<fNPoints;pos++) {
+    if((abs(mcp->Position(pos).X()) < 200.) &&
+       (abs(mcp->Position(pos).Y()) < 200.) &&
+       (mcp->Position(pos).Z() > 0.) &&
+       (mcp->Position(pos).Z() < 500.) && !fMCMuonEntersTPC) {
+      fMCMuonTime = mcp->T(pos) / 1000.; // us relative to beam spill
+      fMCMuonStartX = mcp->Position(pos).X();
+      fMCMuonStartY = mcp->Position(pos).Y();
+      fMCMuonStartZ = mcp->Position(pos).Z();
+      fMCMuonEnergy = mcp->E(pos);
+      fMCMuonEntersTPC = true;
+      mu_trig_time = mcp->T(pos) / 1000.;
+      break;
+    }
+  }
   TVector3 vect1 = (mcp->Position(firstquart).Vect() - mcp->Position(0).Vect()).Unit();
   TVector3 vect2 = (mcp->Position(i).Vect() - mcp->Position(firstquart).Vect()).Unit();
   TVector3 vect3 = (mcp->Position(lastquart).Vect() - mcp->Position(i).Vect()).Unit();
@@ -970,10 +1137,9 @@ void sbnd::AnalyseMichels::FillMC(const art::Ptr<simb::MCParticle>& mcp,
   fMCMuonEndX = mcp->EndX();
   fMCMuonEndY = mcp->EndY();
   fMCMuonEndZ = mcp->EndZ();
+  fMCMuonEndT = mcp->T(mcp->NumberTrajectoryPoints()-1) / 1000.;
+  fMCMuonStopping = ((fMCMuonEndX) > 200 || abs(fMCMuonEndY) > 200 || fMCMuonEndZ < 0. || fMCMuonEndZ > 500) ? false : true;
   TVector3 fMCMuonStartVect = mcp->Position(0).Vect();
-  fMCMuonStartX = fMCMuonStartVect.X();
-  fMCMuonStartY = fMCMuonStartVect.Y();
-  fMCMuonStartZ = fMCMuonStartVect.Z();;
   rotateVector(fMCMuonVect);
   fMCMuonTheta = (fMCMuonVect->Theta()) * 180 / M_PI -90; 		// Minus sign is there as muons are coming down;
   rotateVector(fMCMuonVect);
@@ -989,13 +1155,18 @@ void sbnd::AnalyseMichels::FillMC(const art::Ptr<simb::MCParticle>& mcp,
   fMCMuonEndPz = mcp->EndPz();
   
   for(auto& mcp2 : mctruthVect) {
-    if(abs(mcp2->PdgCode()) != 11 || mcp2->Mother() != fMCMuonG4ID) continue;
+    if(abs(mcp2->PdgCode()) != 11 || mcp2->Mother() != fMCMuonG4ID ||
+       abs(mcp->EndX() - mcp2->Position().X()) > 5. ||
+       abs(mcp->EndY() - mcp2->Position().Y()) > 5. ||
+       abs(mcp->EndZ() - mcp2->Position().Z()) > 5. ) continue;
+    fMCMichelStartProcess = mcp2->Process();
     fMCMichelNPoints = mcp2->NumberTrajectoryPoints();  
     unsigned int i  = mcp2->NumberTrajectoryPoints() -1;
     unsigned int j = mcp2->NumberTrajectoryPoints() / 2;
     fMCMichelID = mcp2->TrackId();
     fMCMichelEnergy = mcp2->E() * 1000;
     fMCMichelEnergyHist->Fill(fMCMichelEnergy);
+    fMCMichelStartT = mcp2->T() / 1000.;
     TVector3 fMCMichelStartVect = mcp2->Position(0).Vect();
     fMCMichelStartX = fMCMichelStartVect.X();
     fMCMichelStartY = fMCMichelStartVect.Y();
@@ -1016,6 +1187,41 @@ void sbnd::AnalyseMichels::FillMC(const art::Ptr<simb::MCParticle>& mcp,
     fMCMichelRelThetaHist->Fill(fMCMichelRelTheta);
     fMCMichelRelPhiHist->Fill(fMCMichelRelPhi);
     fMCMichelEnergyFrac = fMCMichelEnergy / fMCMuonEndEnergy;
+  }
+
+  // Find if there is a coincident software trigger
+  // Accessing MCParticles
+  art::Handle< std::vector<sbnd::trigger::pmtSoftwareTrigger> > trigHandle;
+  std::vector< art::Ptr<sbnd::trigger::pmtSoftwareTrigger> > trigVect;
+  if(e.getByLabel(fSoftwareTriggerLabel, trigHandle))     // Make sure artHandle is from mo$
+    art::fill_ptr_vector(trigVect, trigHandle);
+
+  fMCMuonTrigger = false;
+  fMCMuonTriggerID = -1;
+  for(unsigned i = 0; i < trigVect.size(); i++) {
+    auto trig  = trigVect[i];
+    if((abs((double)trig->trig_ts / 1000. - 1510. - mu_trig_time) < 1.)) {
+      fMCMuonTrigger = true;
+      fMCMuonTriggerID = i;
+    }
+  }
+  // Accessing MCParticles
+  art::Handle< std::vector<std::pair<int, short> > > mamophtHandle;
+  std::vector< art::Ptr<std::pair<int, short>> > mamophtVect;
+  if(e.getByLabel(fMaMOpHTLabel, mamophtHandle))     // Make sure artHandle is from mo$
+    art::fill_ptr_vector(mamophtVect, mamophtHandle);
+
+  fMCMuonTrigger = false;
+  for(unsigned i = 0; i < mamophtVect.size(); i+=2) {
+    auto trig  = mamophtVect[i];
+    auto mich_trig = mamophtVect[i+1];
+    std::cout << ((float)trig->first / 500) - 1510. << "\n";
+    if((abs(((float)trig->first / 500.) - 1510. -  mu_trig_time) < 1.)) {
+      fMCMuonMamophtTime = ((float)trig->first / 500.) - 1510.;
+      fMCMuonMamophtADC = trig->second;
+      fMCMichelMamophtTime = ((float)mich_trig->first / 500.) - 1510.;
+      fMCMichelMamophtADC = mich_trig->second;
+    }
   }
 }
 
@@ -1169,6 +1375,179 @@ void sbnd::AnalyseMichels::FindRecoMichel(
       fRecoMuonID = pfp->Self();
     }
   }
+}
+void sbnd::AnalyseMichels::FillTrigTree(
+  const art::Event& e)
+
+{
+  // Accessing MCParticles
+  art::Handle< std::vector<sbnd::trigger::pmtSoftwareTrigger> > trigHandle;
+  std::vector< art::Ptr<sbnd::trigger::pmtSoftwareTrigger> > trigVect;
+  if(e.getByLabel(fSoftwareTriggerLabel, trigHandle))     // Make sure artHandle is from mo$
+    art::fill_ptr_vector(trigVect, trigHandle);
+
+  art::Handle< std::vector<sbnd::trigger::Coincidence> > coincHandle;
+  std::vector< art::Ptr<sbnd::trigger::Coincidence> > coincVect;
+  if(e.getByLabel(fCoincidenceLabel, coincHandle))     // Make sure artHandle is from mo$
+    art::fill_ptr_vector(coincVect, coincHandle);
+
+
+  fMCMuonTrigger = false;
+  fMCMuonTriggerID = -1;
+  for(unsigned i = 0; i < trigVect.size(); i++) {
+    // Reset vectors
+    fTrigMultVec.clear(); fTrigMultVec.resize(5120);
+    fTrigADCVec.clear(); fTrigADCVec.resize(5120);
+    fTrigADCRiseVec.clear(); fTrigADCRiseVec.resize(5120);
+
+    auto coinc = coincVect[i];
+    fCoincID = coinc->ID;
+    fCoincPlanes = coinc->Planes;
+    fCoincCRTTime = coinc->CRTTime;
+    fCoincPMTTime = coinc->PMTTime;
+    auto trig  = trigVect[i];
+    fTrigID = i;
+    fTrigTime = (float)trig->trig_ts / 1000. - 1510.;
+    int sum  = 0;
+    for(unsigned i = 0; i < trig->wvfVec.size() ; i++) {
+      fTrigMultVec[i] = trig->multVec[i];
+      fTrigADCVec[i] = trig->wvfVec[i];
+      if(i==0) {fTrigADCRiseVec[0] = 0;}
+      else {
+       if(trig->wvfVec[i]>trig->wvfVec[i-1]) {
+         sum += trig->wvfVec[i] - trig->wvfVec[i-1];
+         fTrigADCRiseVec[i] = sum;
+       }
+       else {
+         sum = 0;
+         fTrigADCRiseVec[i] = 0;
+       }
+     }
+    }
+    fTrigTree->Fill();
+  } 
+}
+
+void sbnd::AnalyseMichels::FillPulseTree(
+  const art::Event& e)
+{
+  // Accessing MCParticles
+  art::Handle< std::vector<sbnd::trigger::pmtSoftwareTrigger> > trigHandle;
+  std::vector< art::Ptr<sbnd::trigger::pmtSoftwareTrigger> > trigVect;                                            if(e.getByLabel(fSoftwareTriggerLabel, trigHandle))     // Make sure artHandle is from mo$
+    art::fill_ptr_vector(trigVect, trigHandle);
+
+//  std::cout << "N Triggers: " << trigVect.size() << "\n";
+  for(unsigned i=0; i<trigVect.size();i++) {
+    auto trig = trigVect[i];
+    fPulseTriggerID = (int)i;
+    fPulseCh.clear(); fPulseChBaseline.clear(); fPulseChBaselineSigma.clear();
+    fPulsePeak.clear(); fPulsePE.clear(); fPulseArea.clear();
+    fPulseTStart.clear(); fPulseTEnd.clear(); fPulseTPeak.clear();
+//    std::cout << "  N PMTs: " << trig->pmtInfoVec.size() << "\n";
+    for(auto ch : trig->pmtInfoVec) {
+      for(auto& pulse : ch.pulseVec) {
+        if(pulse.pe < 25.) continue;
+        fPulseCh.push_back(ch.channel);
+        fPulseChBaseline.push_back(ch.baseline);
+        fPulseChBaselineSigma.push_back(ch.baselineSigma);
+        fPulsePeak.push_back(pulse.peak);
+        fPulseArea.push_back(pulse.area);
+        fPulsePE.push_back(pulse.pe);
+        fPulseTStart.push_back(pulse.t_start);
+        fPulseTEnd.push_back(pulse.t_end);
+        fPulseTPeak.push_back(pulse.t_peak);
+      }
+    }
+    if(fPulsePeak.empty()) continue;
+    fPulseTree->Fill();
+  }
+}
+
+void sbnd::AnalyseMichels::MatchMCRecoLight(const art::Event& e)
+{
+  constexpr int kNumChannels = 312;
+
+  // Reset photon vectors
+  fOpCh.clear();
+  for(unsigned ch=0; ch<312; ch++) fOpCh.push_back(ch);
+  fRecoMichelPhotons.clear(); fRecoMichelPhotons.resize(kNumChannels);
+  fMCMichelPhotons.clear(); fMCMichelPhotons.resize(kNumChannels);
+  fRecoMuonPhotons.clear(); fRecoMuonPhotons.resize(kNumChannels);
+  fMCMuonPhotons.clear(); fMCMuonPhotons.resize(kNumChannels);
+  fRecoMichelNOpHits.clear(); fRecoMichelNOpHits.resize(kNumChannels);
+  fRecoMuonNOpHits.clear(); fRecoMuonNOpHits.resize(kNumChannels);
+
+
+  // Process each OpHit input tag
+  for(unsigned i=0; i<fOpHitLabels.size(); i++) {
+    art::InputTag inputTag(fOpHitLabels[i]);
+
+    if (auto opHitsHandle = e.getValidHandle<std::vector<recob::OpHit>>(inputTag)) {
+      for (const auto& hit : *opHitsHandle) {
+//        if(abs(hit.PeakTime() - fMCMuonTime) < 10.) std::cout << fMCMuonTime << "	" << hit.PeakTime() << "	" << hit.PE() << "\n";
+        if (std::abs(hit.PeakTime() - fOpHitDelays[i] - fMCMichelStartT) <= 0.1) {
+          int opChannel = hit.OpChannel();
+          if (opChannel >= 0 && opChannel < kNumChannels) {
+            fRecoMichelPhotons[opChannel] += hit.PE();
+            fRecoMichelNOpHits[opChannel]++;
+          }
+        }
+        else if (std::abs(hit.PeakTime() - fOpHitDelays[i] - fMCMuonTime) <= 0.1) {
+          int opChannel = hit.OpChannel();
+          if (opChannel >= 0 && opChannel < kNumChannels) {
+            fRecoMuonPhotons[opChannel] += hit.PE();
+            fRecoMuonNOpHits[opChannel]++;
+          }
+        }
+      }
+    } else {
+      std::cerr << "Error: No OpHits found for input tag: " << inputTag << std::endl;
+    }
+  }
+
+  // Retrieve and process the SimPhotons
+  std::vector<art::Handle<std::vector<sim::SimPhotons>>> fPhotonHandles;
+  fPhotonHandles = e.getMany<std::vector<sim::SimPhotons>>();
+  for(auto& handle : fPhotonHandles) {
+    if (handle.isValid()) {
+      for (const auto& photons : *handle) {
+        int opChannel = photons.OpChannel();
+        if (opChannel >= 0 && opChannel < kNumChannels) {
+          for (const auto& photon : photons) {
+            if (photon.MotherTrackID == fMCMichelID) {
+              fMCMichelPhotons[opChannel]++;
+            }
+            else if (photon.MotherTrackID == fMCMuonG4ID) {
+              fMCMuonPhotons[opChannel]++;
+            }
+          }
+        }
+      }
+    } else {
+      std::cerr << "Error: No SimPhotons found for input tag: " << fSimPhotonsLabel[0] << std::endl;
+    }
+  }
+
+  // Vector to store the channel information
+  std::vector<std::pair<int, std::pair<double, int>>> channelData;
+
+  // Collect data for each channel with recorded values
+  for (size_t channel = 0; channel < kNumChannels; ++channel) {
+    channelData.emplace_back(channel, std::make_pair(fRecoMichelPhotons[channel], fMCMichelPhotons[channel]));
+  }
+
+  // Output the recorded information
+//  for (const auto& data : channelData) {
+//    int channel = data.first;
+//    double totalPEs = data.second.first;
+//    int onePhotonCount = data.second.second;
+
+//    std::cout << "Optical Channel: " << channel
+//              << ", Total PEs: " << totalPEs
+//              << ", OnePhoton Count: " << onePhotonCount
+//              << std::endl;
+//  }
+  fOpTree->Fill();
 }
 
 DEFINE_ART_MODULE(sbnd::AnalyseMichels)

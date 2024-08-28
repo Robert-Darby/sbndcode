@@ -1,0 +1,12 @@
+BEGIN_PROLOG
+
+MaMOpHT: {
+  module_type: "MaMOpHT"                # The module type must match the C++ class name
+  InputTag: "opdaq" # MC "opdaq"     # Input tag for the OpDetWaveforms
+  Threshold: 1000                       # ADC threshold for peak detection
+  MinPeakWidth: 5                       # Minimum width of a peak in bins
+  MaxPeakSeparation: 4500               # Maximum bin separation between peaks
+  PeakAmplitudeRatio: 0.01              # Amplitude ratio threshold for peak selection
+}
+
+END_PROLOG

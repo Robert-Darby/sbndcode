@@ -1,0 +1,47 @@
+#include "services_sbnd.fcl"
+#include "messages_sbnd.fcl"
+#include "simulationservices_sbnd.fcl"
+#include "rootoutput_sbnd.fcl"
+
+#include "mamopht_config.fcl"
+
+process_name: waveformAnalysis
+
+services:
+{
+    @table::sbnd_detsim_services
+    TFileService: { fileName: "test_hist.root" }
+    RandomNumberGenerator: {} #ART native random number generator
+}
+
+source: {
+  module_type: RootInput
+  fileNames: [ "input_file.root" ]  # Specify the input file(s)
+}
+
+outputs: {
+  out1: {
+    @table::sbnd_rootoutput
+    module_type: RootOutput
+    fileName: "output_file.root"     # Specify the output file
+  }
+}
+
+physics: {
+  producers: {
+    waveformAnalyzer: @local::MaMOpHT   # Use the configuration from the included file
+  }
+
+  analyzers: {
+    # Add any analyzers here if needed
+  }
+
+  mamophtpath: [ waveformAnalyzer ]
+
+ stream1: [ out1 ]
+
+ trigger_paths: [ mamophtpath ]
+
+ end_paths: [ stream1 ]
+
+}

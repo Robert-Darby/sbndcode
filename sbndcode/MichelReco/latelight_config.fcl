@@ -1,0 +1,17 @@
+BEGIN_PROLOG
+
+LateLightAnalyser:
+{
+  module_type: "LateLightAnalyser"
+  InputLabels: ["opdecopmt", "opdecoxarapuca"]
+
+  Threshold: 100.
+  DaphneFreq: 12.5	# ns per bin
+  CAENFreq:   2.	# ns per bin
+  TimeBinWidth: 100.        # Width of bins [ns]
+  StartTimeAfterMuon: 400.  # Time to start analysis after muon peak (ns)
+  EndTimeAfterMuon: 2000.    # Time to end analysis after muon peak (ns)
+}
+
+
+END_PROLOG

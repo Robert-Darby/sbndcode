@@ -1,15 +1,31 @@
+#include "CRTArtdaqFragmentProducer.fcl"
+
 BEGIN_PROLOG
 
 pmtArtdaqFragmentProducer:
 {
   module_type: "pmtArtdaqFragmentProducer"
   InputModuleNameWvfm: "opdaq"
-  InputModuleNameTrigger: "pmttriggerproducer"
-  Baseline: 14745 # new baseline
-  MultiplicityThreshold: 10
-  BeamWindowLength: 1.8 # us, extended by 0.2us to account for delayed signals
+  InputModuleNameTrigger: "pmttriggerProducer"
+  Baseline: 14250 # new baseline
+  MultiplicityThreshold: 3
+  BeamWindowStart: 1510. # us, start of event to start of beam spill
+  BeamWindowLength: 3020. # us, extended by 0.2us to account for delayed signals
   nChannelsFrag: 15
   WfmLength: 5120
+
+  CoincidenceWindow: 1000       # ns, only produce PMT fragments within  x ns of CRT hit
+  CRTTriggerOffset:     1700000.
+  ClockSpeedCRT: @local::CRTArtdaqFragmentProducer.ClockSpeedCRT
+  CRTFragLabel: "crtfragmentProducer"
+  CRTCoincidence: [ [0, 1, 0, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0, 0],
+                    [0, 0, 0, 1, 0, 0, 0],
+                    [0, 0, 0, 0, 1, 0, 0],
+                    [0, 0, 0, 0, 0, 1, 0],
+                    [0, 0, 0, 0, 0, 0, 1],
+                    [0, 0, 0, 0, 0, 1, 1] ]
+
   Verbose: true
 }
 
