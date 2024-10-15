@@ -21,6 +21,7 @@ sbnd_simple_flashmatch:{
   ReadoutDelay: 0.135
   CorrectLightPropagationTime: true
   ForceConcurrence: true
+  ConcurrencyThreshold: 200.	# Only use flashes on same TPC as charge center if charge center beyond x cm of cathode
   CorrectDriftDistance: true
   InputFileName: "FlashMatch/fm_metrics_sbnd.root"
   NoAvailableMetrics: false
