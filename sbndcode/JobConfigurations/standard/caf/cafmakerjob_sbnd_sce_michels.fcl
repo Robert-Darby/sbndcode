@@ -1,0 +1,11 @@
+#include "mcparticleana_config.fcl"
+#include "latelightana_config.fcl"
+#include "cafmakerjob_sbnd_sce.fcl"
+
+physics.analyzers: {
+    @table::physics.analyzers
+    mcana: @local::mcParticleAnalyser
+    latelightana: @local::LateLightAnalyser
+  }
+
+physics.stream1: [mcana, latelightana]

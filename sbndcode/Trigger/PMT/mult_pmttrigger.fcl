@@ -87,12 +87,29 @@ physics:
     #opdaq:     @local::sbnd_opdetdigitizer
     #ophit:     @local::sbnd_ophit_finder_pmt
     pmttriggerproducer: @local::pmtTriggerProducer
+    pmttriggerproducer106: @local::pmtTriggerProducer106
+    pmttriggerproducer159: @local::pmtTriggerProducer159
+    pmttriggerproducer2012: @local::pmtTriggerProducer2012
+    pmttriggerproducer2515: @local::pmtTriggerProducer2515
+    pmttriggerproducer3018: @local::pmtTriggerProducer3018
+    pmttriggerproducer3521: @local::pmtTriggerProducer3521
+    pmttriggerproducer4024: @local::pmtTriggerProducer4024
+    pmttriggerproducer4527: @local::pmtTriggerProducer4527
+    pmttriggerproducer5030: @local::pmtTriggerProducer5030
+    pmttriggerproducer9054: @local::pmtTriggerProducer9054
+    pmttriggerproducer13078: @local::pmtTriggerProducer13078
+    pmttriggerproducer170102: @local::pmtTriggerProducer170102
+    pmttriggerproducer210126: @local::pmtTriggerProducer210126
+    pmttriggerproducer250150: @local::pmtTriggerProducer250150
   }
 
 
   # define the producer and filter modules for this path, order matters,
   # filters reject all following items.  see lines starting physics.producers below
-  reco: [rns, pmttriggerproducer]
+  reco: [rns, pmttriggerproducer, pmttriggerproducer106, pmttriggerproducer159, pmttriggerproducer2012,
+              pmttriggerproducer2515, pmttriggerproducer3018, pmttriggerproducer3521, pmttriggerproducer4024,
+              pmttriggerproducer4527, pmttriggerproducer5030, pmttriggerproducer9054, pmttriggerproducer13078,
+              pmttriggerproducer170102, pmttriggerproducer210126, pmttriggerproducer250150]
 
   # define the output stream, there could be more than one if using filters
   out:  [ out1 ]

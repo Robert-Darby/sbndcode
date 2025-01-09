@@ -1,3 +1,4 @@
+#include "sbnd_flashgeoalgo.fcl"
 BEGIN_PROLOG #comment to run generate_simple_weighted_template.py
 
 sbnd_simple_flashmatch:{
@@ -13,31 +14,42 @@ sbnd_simple_flashmatch:{
   Verbose: false
   BeamSpillTimeStart:       0.1 # us, with some tolerance # TODO: update this when time gets zeroed
   BeamSpillTimeEnd:         1.8  # us, with some tolerance # TODO: update this when time gets zeroed
-  FlashFindingTimeStart: -100.   # us # TODO: tune
-  FlashFindingTimeEnd:    100.   # us # TODO: tune
+  FlashFindingTimeStart: -1500.   # us # TODO: tune
+  FlashFindingTimeEnd:    1500.   # us # TODO: tune
   FlashStart:              -0.02 # us, wrt flash time
   FlashEnd:                 0.08 # us, wrt flash time
+  ReadoutDelay: 0.135
+  CorrectLightPropagationTime: true
   ForceConcurrence: true
+  ConcurrencyThreshold: 200.	# Only use flashes on same TPC as charge center if charge center beyond x cm of cathode
   CorrectDriftDistance: true
   InputFileName: "FlashMatch/fm_metrics_sbnd.root"
   NoAvailableMetrics: false
-  SelectNeutrino: false # it's too buggy to set 'false'
-  MakeTree: false
-  StoreMCInfo: false
+  SelectNeutrino: true # it's too buggy to set 'false'
+  SortOpFlashIntegral: false	# True: Select OpFlashes by total PE count. False: Select OpFlashes by PE peak amplitude (same as SimpleFlashes)
+  UseOpCoords: true
+  InputSearchPath: "FW_SEARCH_PATH"
+  MakeTree: true # false
+  StoreMCInfo: true # false
+  UseScore: true	# true = match charge/flash pairs with lowest score, false = match pairs with closest barycenters
+  YZDist: false		# true = only use Y, Z coords when matching barycenters, flase = use X, Y, Z coords when matching barycenters
   # TODO: tune below
   MinHitQ: 0.
   MinSpacePointQ: 0.
   MinParticleQ: 0.
   MinSliceQ: 0.
   OpHitTime: "PeakTime" # TODO: test and change to RiseTime or StartTime once they become available
-  MinInTimeFlashes: 2
-  MaxFlashes: 7
+  FindAllFlashes: false	# Finds all flashes in search window. Overrides MaxFlashes. CAUTION: Very slow for SimpleFlashes
+  MinInTimeFlashes: 1
+  MaxFlashes: 30
   MinOpHPE: 0.
   MinFlashPE: 10.
   FlashPEFraction: 0.8
   PlaneList: [0, 1, 2]  # Choose which wire planes to use (0, 1, 2 = U, V, W)
   ChargeToNPhotonsShower: 1.0
   ChargeToNPhotonsTrack: 1.0
+  UseGeoThreshold: false
+  FlashGeoConfig: @local::FlashGeoThreshold
   # TODO: tune above
 
   ThresholdTerm:200.
@@ -125,6 +137,7 @@ sbnd_simple_flashmatch_ara.OpFlashProducer: ["opflashtpc0xarapuca", "opflashtpc1
 sbnd_simple_flashmatch_ara.OpFlashHitProducer: ["opflashtpc0xarapuca", "opflashtpc1xarapuca"]
 sbnd_simple_flashmatch_ara.BeamSpillTimeStart: 0.
 sbnd_simple_flashmatch_ara.BeamSpillTimeEnd: 1.8
+sbnd_simple_flashmatch_ara.FlashGeoConfig.PDTypes: ["xarapuca_vuv", "xarapuca_vis"]
 
 sbnd_simple_flashmatch_ara_sce: @local::sbnd_simple_flashmatch
 sbnd_simple_flashmatch_ara_sce.FlashType: "simpleflash_ara"
@@ -137,6 +150,7 @@ sbnd_simple_flashmatch_ara_sce.OpFlashProducer: ["opflashtpc0xarapuca", "opflash
 sbnd_simple_flashmatch_ara_sce.OpFlashHitProducer: ["opflashtpc0xarapuca", "opflashtpc1xarapuca"]
 sbnd_simple_flashmatch_ara_sce.BeamSpillTimeStart: 0.
 sbnd_simple_flashmatch_ara_sce.BeamSpillTimeEnd: 1.8
+sbnd_simple_flashmatch_ara_sce.FlashGeoConfig.PDTypes: ["xarapuca_vuv", "xarapuca_vis"]
 
 sbnd_simple_flashmatch_op: @local::sbnd_simple_flashmatch
 sbnd_simple_flashmatch_op.IsSimple: false
@@ -162,6 +176,7 @@ sbnd_simple_flashmatch_opara.OpFlashProducer: ["opflashtpc0xarapuca", "opflashtp
 sbnd_simple_flashmatch_opara.OpFlashHitProducer: ["opflashtpc0xarapuca", "opflashtpc1xarapuca"]
 sbnd_simple_flashmatch_opara.BeamSpillTimeStart: 0.
 sbnd_simple_flashmatch_opara.BeamSpillTimeEnd: 1.65
+sbnd_simple_flashmatch_opara.FlashGeoConfig.PDTypes: ["xarapuca_vuv", "xarapuca_vis"]
 
 sbnd_simple_flashmatch_opara_sce: @local::sbnd_simple_flashmatch
 sbnd_simple_flashmatch_opara_sce.IsSimple: false
@@ -175,5 +190,6 @@ sbnd_simple_flashmatch_opara_sce.OpFlashProducer: ["opflashtpc0xarapuca", "opfla
 sbnd_simple_flashmatch_opara_sce.OpFlashHitProducer: ["opflashtpc0xarapuca", "opflashtpc1xarapuca"]
 sbnd_simple_flashmatch_opara_sce.BeamSpillTimeStart: 0.
 sbnd_simple_flashmatch_opara_sce.BeamSpillTimeEnd: 1.65
+sbnd_simple_flashmatch_opara_sce.FlashGeoConfig.PDTypes: ["xarapuca_vuv", "xarapuca_vis"]
 
 END_PROLOG #comment to run generate_simple_weighted_template.py

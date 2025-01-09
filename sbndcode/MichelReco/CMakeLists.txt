@@ -4,17 +4,21 @@ set(      MODULE_LIBRARIES larcorealg::Geometry
                            larsim::Simulation lardataobj::Simulation
                            larsim::MCCheater_BackTrackerService_service
                            larsim::MCCheater_ParticleInventoryService_service
+                           larsim::Utils
                            lardata::Utilities
                            larevt::Filters
                            lardataobj::RawData
                            lardataobj::RecoBase
-			                larreco::Calorimetry
+			               larreco::Calorimetry
                            larreco::RecoAlg
                            lardata::RecoObjects
                            larpandora::LArPandoraInterface
                            sbndcode_CRTUtils
                            sbndcode_CRT
                            sbnobj::Common_CRT
+                           sbnobj::SBND_CRT
+                           sbnobj::SBND_LateLight
+                           sbndcode_GeoWrappers
                            nusimdata::SimulationBase
                            art::Framework_Core
                            art::Framework_Principal
@@ -44,6 +48,10 @@ set(      MODULE_LIBRARIES larcorealg::Geometry
 cet_build_plugin(AnalyseMichels art::Module SOURCE AnalyseMichels_module.cc LIBRARIES ${MODULE_LIBRARIES} )
 cet_build_plugin(MaMOpHT art::Module SOURCE MaMOpHT_module.cc LIBRARIES ${MODULE_LIBRARIES} )
 cet_build_plugin(LateLightAnalyser art::Module SOURCE LateLightAnalyser_module.cc LIBRARIES ${MODULE_LIBRARIES} )
+cet_build_plugin(LateLightProducer art::Module SOURCE LateLightProducer_module.cc LIBRARIES ${MODULE_LIBRARIES} )
+cet_build_plugin(StoppingMuonFilter art::Module SOURCE StoppingMuonFilter_module.cc LIBRARIES ${MODULE_LIBRARIES} )
+cet_build_plugin(StoppingMuonLateLightAnalyzer art::Module SOURCE StoppingMuonLateLightAnalyser_module.cc LIBRARIES ${MODULE_LIBRARIES} )
+cet_build_plugin(MCParticleAnalyser art::Module SOURCE MCParticleAnalyser_module.cc LIBRARIES ${MODULE_LIBRARIES} )
 # install_headers()
 install_fhicl()
 install_source()

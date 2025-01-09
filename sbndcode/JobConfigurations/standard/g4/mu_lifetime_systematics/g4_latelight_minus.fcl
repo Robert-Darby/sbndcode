@@ -1,0 +1,3 @@
+#include "g4_sce_lite.fcl"
+
+services.LArPropertiesService.ScintSlowTimeConst: 910.

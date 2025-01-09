@@ -1,18 +1,13 @@
 ////////////////////////////////////////////////////////////////////////
 // Class:       MaMOpHT
-// Plugin Type: producer (Unknown Unknown)
+// Plugin Type: producer (art::EDProducer)
 // File:        MaMOpHT_module.cc
-//
-// Generated at Tue Aug 13 08:17:12 2024 by Robert Darby using cetskelgen
-// from cetlib version 3.18.02.
 ////////////////////////////////////////////////////////////////////////
 
 #include "art/Framework/Core/EDProducer.h"
 #include "art/Framework/Core/ModuleMacros.h"
 #include "art/Framework/Principal/Event.h"
 #include "art/Framework/Principal/Handle.h"
-#include "art/Framework/Principal/Run.h"
-#include "art/Framework/Principal/SubRun.h"
 #include "canvas/Utilities/InputTag.h"
 #include "fhiclcpp/ParameterSet.h"
 #include "messagefacility/MessageLogger/MessageLogger.h"
@@ -23,6 +18,7 @@
 #include <map>
 #include <numeric>
 #include <algorithm>
+#include <limits>
 
 namespace sbnd {
   class MaMOpHT;
@@ -32,25 +28,25 @@ class sbnd::MaMOpHT : public art::EDProducer {
 public:
   explicit MaMOpHT(fhicl::ParameterSet const& p);
   
-  // Plugins should not be copied or assigned.
   MaMOpHT(MaMOpHT const&) = delete;
   MaMOpHT(MaMOpHT&&) = delete;
   MaMOpHT& operator=(MaMOpHT const&) = delete;
   MaMOpHT& operator=(MaMOpHT&&) = delete;
 
-  // Required functions.
   void produce(art::Event& e) override;
 
 private:
   float CalculateBaselineAndSubtract(std::vector<short>& waveform) const;
   void ApplyRollingWindow(const std::vector<short>& waveform, std::map<int, short>& peaks) const;
-  void SelectPeaks(const std::map<int, short>& peaks, std::vector<std::pair<int, int>>& selectedPeaks) const;
+  void SelectPeaks(const std::map<int, short>& peaks, std::vector<std::pair<float, short>>& selectedPeaks) const;
 
   const art::InputTag fInputTag;
   const short fThreshold;
   const size_t fMinPeakWidth;
   const size_t fMaxPeakSeparation;
   const float fPeakAmplitudeRatio;
+
+  float startTime, endTime;
 };
 
 sbnd::MaMOpHT::MaMOpHT(fhicl::ParameterSet const& p)
@@ -61,19 +57,32 @@ sbnd::MaMOpHT::MaMOpHT(fhicl::ParameterSet const& p)
     fMaxPeakSeparation(p.get<size_t>("MaxPeakSeparation", 4500)),
     fPeakAmplitudeRatio(p.get<float>("PeakAmplitudeRatio", 0.01))
 {
-  produces<std::vector<std::pair<int, int>>>();
+  produces<std::vector<std::pair<float, short>>>();
 }
 
 void sbnd::MaMOpHT::produce(art::Event& e) {
   auto waveforms = e.getValidHandle<std::vector<raw::OpDetWaveform>>(fInputTag);
+  startTime = std::numeric_limits<float>::max();
+  endTime = std::numeric_limits<float>::lowest();
 
-  std::vector<short> cumulativeWaveform(3020 * 500, 0);
+  // First loop: Determine the bounds of the cumulative waveform
+  for (auto const& waveform : *waveforms) {
+    float waveformStart = waveform.TimeStamp();
+    float waveformEnd = waveformStart + waveform.Waveform().size() / 500.0;  // Example frequency of 500 Hz
 
+    startTime = std::min(startTime, waveformStart);
+    endTime = std::max(endTime, waveformEnd);
+  }
+
+  // Initialize the cumulative waveform with appropriate size based on the calculated bounds
+  size_t waveformSize = static_cast<size_t>((endTime - startTime) * 500);  // Example frequency of 500 Hz
+  std::vector<short> cumulativeWaveform(waveformSize, 0);
+
+  // Second loop: Process and accumulate the waveforms
   for (auto const& waveform : *waveforms) {
     std::vector<short> wf = waveform.Waveform();
     float baseline = CalculateBaselineAndSubtract(wf);
-    unsigned int startBin = std::max(0, static_cast<int>((waveform.TimeStamp() + 1510) * 500));
-    std::cout << waveform.TimeStamp() << "     " << startBin << "\n";
+    unsigned int startBin = static_cast<unsigned int>((waveform.TimeStamp() - startTime) * 500);
 
     for (size_t i = 0; i < wf.size(); ++i) {
       if (startBin + i < cumulativeWaveform.size()) {
@@ -84,10 +93,14 @@ void sbnd::MaMOpHT::produce(art::Event& e) {
 
   std::map<int, short> peaks;
   ApplyRollingWindow(cumulativeWaveform, peaks);
-  std::vector<std::pair<int, int>> selectedPeaks;
+  std::vector<std::pair<float, short>> selectedPeaks;
   SelectPeaks(peaks, selectedPeaks);
 
-  e.put(std::make_unique<std::vector<std::pair<int, int>>>(selectedPeaks));
+  e.put(std::make_unique<std::vector<std::pair<float, short>>>(selectedPeaks));
+
+  // Log the start and end time of the cumulative waveform
+  mf::LogInfo("WaveformTiming") << "Cumulative Waveform Start Time: " << startTime
+                                << ", End Time: " << endTime;
 }
 
 float sbnd::MaMOpHT::CalculateBaselineAndSubtract(std::vector<short>& waveform) const {
@@ -122,17 +135,16 @@ void sbnd::MaMOpHT::ApplyRollingWindow(const std::vector<short>& waveform, std::
   }
 }
 
-void sbnd::MaMOpHT::SelectPeaks(const std::map<int, short>& peaks, std::vector<std::pair<int, int>>& selectedPeaks) const {
+void sbnd::MaMOpHT::SelectPeaks(const std::map<int, short>& peaks, std::vector<std::pair<float, short>>& selectedPeaks) const {
   for (auto it = peaks.begin(); it != peaks.end(); ++it) {
     auto next_it = std::next(it);
-    if (next_it != peaks.end() && ((unsigned)next_it->first - (unsigned)it->first <= fMaxPeakSeparation)) {
+    if (next_it != peaks.end() && (next_it->first - it->first <= (int)fMaxPeakSeparation)) {
       if (next_it->second >= fPeakAmplitudeRatio * it->second) {
-        selectedPeaks.push_back(*it);
-        selectedPeaks.push_back(*next_it);
+        float timestamp = it->first / 500.0 + startTime;  // Convert bin number back to time
+        selectedPeaks.push_back({timestamp, it->second});
       }
     }
   }
 }
 
 DEFINE_ART_MODULE(sbnd::MaMOpHT)
-

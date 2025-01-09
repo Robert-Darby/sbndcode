@@ -1,0 +1,8 @@
+#include "g4_sce_lite.fcl"
+services.LArPropertiesService.AlphaScintYield: 12600.
+services.LArPropertiesService.ElectronScintYield: 15000.
+services.LArPropertiesService.KaonScintYield: 18000.
+services.LArPropertiesService.MuonScintYield: 18000.
+services.LArPropertiesService.ProtonScintYield: 14400.
+services.LArPropertiesService.PionScintYield: 18000.
+services.LArPropertiesService.ScintYield: 18000.

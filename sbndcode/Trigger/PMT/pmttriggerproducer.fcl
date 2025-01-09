@@ -5,12 +5,11 @@ BEGIN_PROLOG
 pmtTriggerProducer:
 {
   module_type: "pmtTriggerProducer"
-  InputModule: "pmtdecoder"  	# Data: "pmtdecoder"	# MC "opdaq"
+  InputModule: "opdaq"
   ClusterModuleLabel: "linecluster"
   OpDetsToPlot: ["pmt_coated", "pmt_uncoated"]
-  WaveformInstanceName: "PMTChannels"	# Name from eventdump
   IndividualThresholds: false #if true, Threshold needs to be a 120 element array of each individual PMT ADC threshold in order of lowest to highest channel number
-  Threshold: [14125., 14175.] # [coated, uncoated], unless IndividualThresholds is true *not tuned*
+  Threshold: [14625.0, 14675.0] # [coated, uncoated], unless IndividualThresholds is true *not tuned*
   #ADC, ideal single PE response: 1 PE ~ 8 ADC, test bench: 1 PE ~ 25 ADC
   OVTHRWidth: 11 #over-threshold width, page 40 of manual
   #paired and unpaired pmt channel numbers, to pair two channels put them at the same index in Pair1 and Pair2
@@ -20,12 +19,57 @@ pmtTriggerProducer:
   Pair2: [7,9,11,13,15,17,37,39,41,61,63,65,67,69,71,85,87,89,91,93,95,115,117,119,139,141,143,145,147,149,163,165,167,169,171,173,193,195,197,217,219,221,223,225,227,241,243,245,247,249,251,271,273,275,295,297]
   Unpaired: [298,299,300,301,302,303,304,305]
   PairLogic: "OR" #logic for pairing PMTs, option are "OR" or "AND"
-  WindowStart: -1510.0 #us, window for pmt trigger time start
-  WindowEnd: 1510. #us, window for pmt trigger time end
-  SaveHists: true #save hists for all steps (raw, digital, paired, etc.)
-  EvHists: [10255] #if fSaveHists=true, then what events all hists are saved for. if too many hists are saved, may have memory issues; try saving less events.
+  WindowStart: -1510. #us, window for pmt trigger time start
+  WindowEnd: 3020. #us, window for pmt trigger time end
+  SaveHists: false #save hists for all steps (raw, digital, paired, etc.)
+  EvHists: [1] #if fSaveHists=true, then what events all hists are saved for. if too many hists are saved, may have memory issues; try saving less events.
   Verbose: true
 
 }
+
+pmtTriggerProducer106: @local::pmtTriggerProducer
+pmtTriggerProducer106.Threshold: [14500., 14600.]
+
+pmtTriggerProducer159: @local::pmtTriggerProducer
+pmtTriggerProducer159.Threshold: [14375., 14525.]
+
+pmtTriggerProducer2012: @local::pmtTriggerProducer
+pmtTriggerProducer2012.Threshold: [14250., 14450.]
+
+pmtTriggerProducer2515: @local::pmtTriggerProducer
+pmtTriggerProducer2515.Threshold: [14125., 14375.]
+
+pmtTriggerProducer3018: @local::pmtTriggerProducer
+pmtTriggerProducer3018.Threshold: [14000., 14300.]
+
+pmtTriggerProducer3521: @local::pmtTriggerProducer
+pmtTriggerProducer3521.Threshold: [143875., 14225.]
+
+pmtTriggerProducer4024: @local::pmtTriggerProducer
+pmtTriggerProducer4024.Threshold: [143750., 14150.]
+
+pmtTriggerProducer4527: @local::pmtTriggerProducer
+pmtTriggerProducer4527.Threshold: [13625., 14075.]
+
+pmtTriggerProducer5030: @local::pmtTriggerProducer
+pmtTriggerProducer5030.Threshold: [13500., 14000.]
+
+pmtTriggerProducer9054: @local::pmtTriggerProducer
+pmtTriggerProducer9054.Threshold: [12500., 13250.]
+
+pmtTriggerProducer13078: @local::pmtTriggerProducer
+pmtTriggerProducer13078.Threshold: [11500., 12500.]
+
+pmtTriggerProducer170102: @local::pmtTriggerProducer
+pmtTriggerProducer170102.Threshold: [10500., 11500.]
+
+pmtTriggerProducer210126: @local::pmtTriggerProducer
+pmtTriggerProducer210126.Threshold: [5500., 10750.]
+
+pmtTriggerProducer250150: @local::pmtTriggerProducer
+pmtTriggerProducer250150.Threshold: [8500., 10000.]
+
+
+
 
 END_PROLOG

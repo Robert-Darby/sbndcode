@@ -19,7 +19,24 @@ physics.reco2_sce: [@sequence::physics.reco2,
 
 physics.trigger_paths: [ reco2_sce ]
 
-physics.end_paths: [stream1, caloskimana]
+physics.end_paths: [stream1, caloskimana, latelightana]
 
 # turn on space charge service
 #include "enable_spacecharge_services_sbnd.fcl"
+
+physics.producers.fmatchopSCE.UseScore: false
+physics.producers.fmatchopSCE.UseGeoThreshold: true
+physics.producers.fmatchoparaSCE.UseScore: false
+physics.producers.fmatchoparaSCE.UseGeoThreshold: false
+
+physics.producers.opt0finder.SelectNeutrino: false
+physics.producers.opt0finderSCE.SelectNeutrino: false
+physics.producers.opt0finder.FlashVetoTimeStart: -1510.
+physics.producers.opt0finder.FlashVetoTimeEnd: 1510.
+physics.producers.opt0finderSCE.FlashVetoTimeStart: -1510.
+physics.producers.opt0finderSCE.FlashVetoTimeEnd: 1510.
+
+physics.analyzers.caloskim.RequireT0: false
+physics.analyzers.caloskim.SelectionTools: []
+# physics.analyzers.caloskim.SelectionTools[0].EndMediandQdxCut: 0.
+# physics.analyzers.caloskim.SelectionTools[0].

@@ -25,6 +25,8 @@
 ##include "triggeralgo_service.fcl"
 ##include "photpropservices_sbnd.fcl"
 
+#include "mcparticleana_config.fcl"
+#include "stoppingmuonlatelightana_config.fcl"
 
 process_name: Reco
 

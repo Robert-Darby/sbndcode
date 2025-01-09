@@ -1,0 +1,12 @@
+#include "pmttriggerproducer.fcl"
+#include "sbnd_flashfinder_deco.fcl"
+
+BEGIN_PROLOG
+
+LateLightAnalyser:
+{
+  module_type: "LateLightAnalyser"
+  StoppingMuonTriggerTag: "latelightproducer"
+}
+
+END_PROLOG

@@ -36,7 +36,7 @@
 #include "mcreco_sbnd.fcl"
 #include "rootoutput_sbnd.fcl"
 #include "config_genericCRT.fcl"
-
+#include "stoppingmuonfilter_config.fcl"
 
 process_name: G4
 
@@ -96,6 +96,10 @@ physics:
     simplemerge: @local::sbnd_simplemerge
   }
 
+  filters: {
+    stoppingmu: @local::stoppingmufilter
+  }
+
   # All producers and filters modules for this path, order matters
   simulate: [ rns
             , loader
@@ -109,6 +113,7 @@ physics:
             # , simdrift ## 1D TPC simulation no longer run
             , mcreco
             , genericcrt
+            , stoppingmu
           ]
 
   # The output stream, there could be more than one if using filters

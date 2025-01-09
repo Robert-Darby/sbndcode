@@ -12,6 +12,7 @@ sbnd_opt0_finder:
   SliceProducer:   "pandora"
   TrackProducer:   "pandoraTrack"
   ShowerProducer:  "pandoraShowerSBN"
+  LateLightProducer: "latelightproducer"
   CaloProducer:    "pandoraCalo"
 
   FlashVetoTimeStart: -1e9

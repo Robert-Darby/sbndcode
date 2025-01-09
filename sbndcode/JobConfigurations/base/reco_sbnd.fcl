@@ -53,8 +53,11 @@
 
 #include "mlreco_sbnd.fcl"
 #include "cluster_sbnd.fcl"
+#include "sbn_cnnid.fcl"
 
-#include "latelight_config.fcl"
+#include "stoppingmuonlatelightana_config.fcl"
+#include "mcparticleana_config.fcl"
+#include "latelightana_config.fcl"
 process_name: Reco
 
 services:
@@ -253,6 +256,8 @@ physics:
  # Run caloskimmer to produce ntuples for calibration as part of reco2 chain
 
  analyzers:{
+  mcparticleanalyser: @local::mcParticleAnalyser
+  stoppingmu: @local::StoppingMuonLateLightAnalyzer
   latelight: @local::LateLightAnalyser
   caloskim: @local::caloskim_nodigits_goldentracks
   crtskim: @local::crtskim_sbnd
@@ -261,7 +266,7 @@ physics:
   superampvmpr: @local::sbnd_supera_mpvmpr
  }
 
- latelightana: [ latelight ]
+ latelightana: [ latelight, mcparticleanalyser, stoppingmu ]
  caloskimana: [ caloskim, crtskim, pmtskim ]
  superaana: [ supera ] #outputs larcv.root for use in mlreco
 
@@ -273,7 +278,7 @@ physics:
 
  #end_paths is a keyword and contains the paths that do not modify the art::Event,
  #ie analyzers and output streams.  these all run simultaneously
- end_paths:     [stream1]
+ end_paths:     [stream1, latelightana]
 }
 
 #block to define where the output goes.  if you defined a filter in the physics

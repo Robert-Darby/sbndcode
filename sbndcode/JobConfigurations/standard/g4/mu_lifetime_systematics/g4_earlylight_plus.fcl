@@ -1,0 +1,2 @@
+#include "g4_sce_lite.fcl"
+services.LArPropertiesService.ScintFastTimeConst: 7.

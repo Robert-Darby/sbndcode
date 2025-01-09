@@ -16,6 +16,7 @@ physics.producers.cafmaker.OpT0Label: "opt0finderSCE"
 
 physics.producers.cnnid.ClusterModuleLabel:        "pandoraSCE"
 physics.producers.cnnid.PFParticleModuleLabel:     "pandoraSCE"
+physics.producers.cnnid.SkipClearCosmics: false
 
 physics.producers.pandoraTrackMCS.TrackLabel: "pandoraSCETrack"
 physics.producers.pandoraTrackRange.TrackLabel: "pandoraSCETrack"

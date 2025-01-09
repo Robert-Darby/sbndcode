@@ -1,0 +1,9 @@
+BEGIN_PROLOG
+
+mcParticleAnalyser:
+{
+  module_type:		"MCParticleAnalyser"
+  MCParticleLabel: 	"largeant"
+}
+
+END_PROLOG
