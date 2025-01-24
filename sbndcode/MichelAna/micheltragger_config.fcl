@@ -31,6 +31,7 @@ LateLightProducer:
   CRTCoincidence: 240. # [ns] Search for muon hits within this scope of a valid CRT hit
 
   # Find peaks in individual waveforms
+  OpFlashLabels: ["opflashtpc0", "opflashtpc1", "opflashtpc0xarapuca", "opflashtpc1xarapuca"]
   InputLabels: ["opdecopmt"]
   InputPolarity: [ 1. ]   # -1 or 1. -1 flips the waveform
   MuonThresholds: [ 125., 75., 50., 50.]  # Min ADC for a muon peak for each detector type

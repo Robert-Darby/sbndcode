@@ -1,0 +1,21 @@
+#include "stoppingmug4filter_config.fcl"
+#include "standard_g4_sbnd.fcl"
+
+
+physics.simulate: [ rns
+                  , loader
+                  , largeant
+                  , simplemerge #merges dropped and nominal MCParticle
+                  , sedlite
+                  , ionandscint
+                  , ionandscintout
+                  , pdfastsim
+                  , pdfastsimout
+                  # , simdrift #1D drift sim no longer run
+                  , michelfilter # Adding filter
+                  , mcreco
+                ]
+
+
+physics.filters.michelfilter: @local::stoppingmug4filter
+outputs.out1.SelectEvents: [ "simulate" ]

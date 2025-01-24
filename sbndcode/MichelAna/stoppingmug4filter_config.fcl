@@ -1,0 +1,14 @@
+BEGIN_PROLOG
+
+stoppingmug4filter: {
+  module_type: "StoppingMuonFilter"
+  MCParticleTag: "largeant"
+  MinX: -185.
+  MaxX: 185.
+  MinY: -185.
+  MaxY: 185.
+  MinZ: 15.
+  MaxZ: 485.
+}
+
+END_PROLOG

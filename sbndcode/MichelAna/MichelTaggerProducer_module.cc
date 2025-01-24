@@ -17,7 +17,9 @@
 #include "canvas/Utilities/InputTag.h"
 #include "canvas/Persistency/Common/FindManyP.h" // Find associations as pointers
 #include "canvas/Persistency/Common/FindOneP.h"
+#include "lardata/Utilities/AssociationUtil.h"
 
+#include "canvas/Persistency/Common/Assns.h"
 #include "sbndcode/Geometry/GeometryWrappers/CRTGeoAlg.h"
 #include "sbndcode/CRT/CRTUtils/CRTCommonUtils.h"
 #include "sbndcode/Geometry/GeometryWrappers/TPCGeoAlg.h"
@@ -26,6 +28,8 @@
 #include "sbnobj/SBND/CRT/FEBData.hh"
 #include "sbnobj/SBND/CRT/CRTEnums.hh"
 #include "lardataobj/Simulation/AuxDetHit.h"
+#include "lardataobj/RecoBase/OpFlash.h"
+
 #include "sbnobj/SBND/Trigger/MichelTag.hh"
 #include "art_root_io/TFileService.h"
 #include "sbnobj/SBND/Trigger/pmtTrigger.hh"
@@ -86,6 +90,7 @@ private:
   const float fPMTReadoutDelay, fARAReadoutDelay;
 
   // For finding peaks in summed waveform
+  const std::vector<std::string> fOpFlashLabels;
   const std::string fFinderInputLabel;
   const std::string fPMTTriggerLabel;
   const int fMinPMTMultiplicity;
@@ -174,7 +179,7 @@ private:
   void findPeaks(const std::vector<float> &seazrchWaveform, const std::vector<float> &waveform, std::vector<std::pair<size_t, float>> &peakIndices);
   void findPeakPairs(const std::vector<std::pair<size_t, float>> &peakIndices, const bool use_opmuons, std::vector<std::pair<size_t, size_t>> &peakPairs, int channel);
   void findCRTTimes(const art::Event &e);
-  std::vector<std::pair<float, float>> findOpMuons(const art::Event &e, std::unique_ptr<std::vector<sbnd::MichelTag>> &micheltag_v);
+  std::vector<std::pair<float, float>> findOpMuons(art::Event &e, std::unique_ptr<std::vector<sbnd::MichelTag>> &micheltag_v, std::unique_ptr<art::Assns<recob::OpFlash, sbnd::MichelTag>> &micheltag_opflash_assn_v);
   void addPeakToMap(std::map<int, std::vector<std::pair<int, float>>> &multMap, int g4id, int opChannel, int pair_channel, float peakAmp, bool requirePositive);
   std::pair<std::vector<float>, std::vector<float>> binAndFit(const std::vector<float> &data, size_t peakIndex, int channel);
   void ConvertWaveformToHistogram(const raw::OpDetWaveform &waveform, int eventNumber);
@@ -194,6 +199,7 @@ sbnd::MichelTaggerProducer::MichelTaggerProducer(fhicl::ParameterSet const &p)
       fARAReadoutDelay(p.get<float>("XARAPUCAReadoutDelay", 0.0)),
 
       // For finding peaks in summed waveform
+      fOpFlashLabels(p.get<std::vector<std::string>>("OpFlashLabels")),
       fFinderInputLabel(p.get<std::string>("FinderInputLabel")),
       fPMTTriggerLabel(p.get<std::string>("PMTTriggerLabel")),
       fMinPMTMultiplicity(p.get<int>("MinPMTMultiplicity", 10)),
@@ -233,6 +239,7 @@ sbnd::MichelTaggerProducer::MichelTaggerProducer(fhicl::ParameterSet const &p)
       fVerbose(p.get<bool>("Verbose", false))
 {
   produces<std::vector<sbnd::MichelTag>>();
+  produces<art::Assns<recob::OpFlash, sbnd::MichelTag>>();
 
   art::ServiceHandle<art::TFileService> tfs;
   fTree = tfs->make<TTree>("TailTree", "Waveform Producis Tree");
@@ -287,6 +294,8 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
 {
   std::unique_ptr<std::vector<sbnd::MichelTag>>
       micheltag_v(new std::vector<sbnd::MichelTag>);
+  std::unique_ptr<art::Assns<recob::OpFlash, sbnd::MichelTag>>
+      micheltag_opflash_assn_v(new art::Assns<recob::OpFlash, sbnd::MichelTag>);
 
   fEventID = e.id().event();
   fRun = e.run();
@@ -316,7 +325,7 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
   }
 
   opMuons.clear();
-  opMuons = findOpMuons(e, micheltag_v);
+  opMuons = findOpMuons(e, micheltag_v, micheltag_opflash_assn_v);
   if (fVerbose)
   {
     std::cout << "OpMuons: \n";
@@ -636,7 +645,11 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
 
     fTriggerTree->Fill();
   } // Loop over MC muon_tuple_vect
+
+  // Match MichelTags to OpFlashes by time
+
   e.put(std::move(micheltag_v));
+  e.put(std::move(micheltag_opflash_assn_v));
 }
 
 int sbnd::MichelTaggerProducer::findChannelPair(int opChannel)
@@ -999,8 +1012,9 @@ void sbnd::MichelTaggerProducer::findCRTTimes(const art::Event &e)
 }
 
 std::vector<std::pair<float, float>> sbnd::MichelTaggerProducer::findOpMuons(
-    const art::Event &e,
-    std::unique_ptr<std::vector<sbnd::MichelTag>> &micheltag_v)
+    art::Event &e,
+    std::unique_ptr<std::vector<sbnd::MichelTag>> &micheltag_v,
+    std::unique_ptr<art::Assns<recob::OpFlash, sbnd::MichelTag>> &micheltag_opflash_assn_v)
 {
   findCRTTimes(e);
 
@@ -1109,6 +1123,20 @@ std::vector<std::pair<float, float>> sbnd::MichelTaggerProducer::findOpMuons(
       }
     }
     micheltag_v->push_back(micheltag_trigger);
+
+    // Add associations to OpFlashes within 50ns
+    for(const auto& opfTag : fOpFlashLabels) {
+      auto const & flash_h = e.getValidHandle<std::vector<recob::OpFlash>>(opfTag);
+      if(!flash_h.isValid() || flash_h->empty()) 
+        mf::LogInfo("MichelTagger") << "Don't have good flashes from producer " << opfTag << "\n";
+      std::vector<art::Ptr<recob::OpFlash>> _opflash_ptr_v;
+      art::fill_ptr_vector(_opflash_ptr_v, flash_h);
+
+      for(const auto flash : _opflash_ptr_v){
+        if(abs(flash->Time() - micheltag_trigger.MuonTime) > 0.05) continue;
+        util::CreateAssn(*this, e, *micheltag_v, flash, *micheltag_opflash_assn_v);
+      }
+    }
 
     if (fUseMC)
     {
