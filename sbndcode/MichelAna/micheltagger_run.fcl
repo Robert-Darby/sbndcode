@@ -1,0 +1,62 @@
+#include "services_sbnd.fcl"
+#include "simulationservices_sbnd.fcl"
+#include "messages_sbnd.fcl"
+#include "sam_sbnd.fcl"
+
+#include "micheltagger_config.fcl"
+
+process_name: MichelTag
+
+services:
+{
+  # Load the service that manages root files for histograms.
+  TFileService:              { fileName: "mtag_tree.root" }
+  RandomNumberGenerator:     {}
+  message:                   @local::sbnd_message_services_prod # from messages_sbnd.fcl
+  FileCatalogMetadata:       @local::sbnd_file_catalog_mc       # from sam_sbnd.fcl
+                             @table::sbnd_services              # from services_sbnd.fcl
+			                       @table::sbnd_simulation_services
+}
+
+source:
+{
+  module_type: RootInput
+  maxEvents:  -1  # Number of events to create
+}
+
+outputs:
+{
+  out1:
+  {
+    module_type: RootOutput
+    fileName:    "%ifb_%p.root"
+    dataTier:    "reconstructed"
+    compressionLevel: 1
+ }
+}
+
+physics:
+{
+  producers:
+  {
+    michelraw: @local::MichelTaggerProducer
+    micheldeco: @local::MichelTaggerProducer
+  }
+
+  mtag: [
+    michelraw,
+    micheldeco
+  ]
+
+
+  stream1: [out1]
+  trigger_paths: [mtag]
+
+  end_paths: [stream1]
+}
+
+
+physics.producers.mtagraw.FinderInputLabel: "opdaq"
+physics.producers.mtagraw.FinderPolarity: -1.
+physics.producers.mtagraw.InputLabels: ["opdaq"]
+physics.producers.mtagraw.InputPolarity: [-1., -1.]

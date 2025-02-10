@@ -29,6 +29,7 @@
 #include "sbnobj/SBND/CRT/CRTEnums.hh"
 #include "lardataobj/Simulation/AuxDetHit.h"
 #include "lardataobj/RecoBase/OpFlash.h"
+#include "lardataobj/Simulation/SimEnergyDeposit.h"
 
 #include "sbnobj/SBND/Trigger/MichelTag.hh"
 #include "art_root_io/TFileService.h"
@@ -64,10 +65,13 @@ public:
   struct MCMuon
   {
     int G4ID;
+    float StartX, StartY, StartZ;
     float Time;
     int MichelG4ID;
+    float MichelStartX, MichelStartY, MichelStartZ;
     float MichelEnergy, MichelTime;
-        // float MichelTime, MichelEnergy;
+    long MichelDepPE;
+    // float MichelTime, MichelEnergy;
     float FlashTime, MichelFlashTime;
     bool HasFlash, Stopping, EntersTPC;
   };
@@ -92,17 +96,21 @@ private:
   // For finding peaks in summed waveform
   const std::vector<std::string> fOpFlashLabels;
   const std::string fFinderInputLabel;
+  const std::vector<std::string> fFinderOpTypes;
   const std::string fPMTTriggerLabel;
   const int fMinPMTMultiplicity;
   const float fFinderPolarity;
   const float fFindMuonThreshold, fFindMichelPeak;
+  const float fMuonMichelMaxRatio;
   const std::string fCRTLabel;
   const sbnd::crt::CRTGeoAlg fCRTGeo;
   const float fCRTOffset, fCRTClockSpeed;
   const float fCRTCoincidence;
+  const int fRunningAvgSampleWidth;
 
   // For finding peaks in individual waveforms
   const std::vector<art::InputTag> fInputLabels;
+  const std::vector<std::string> fInputOpTypes;
   const std::vector<float> fInputPolarity;
   const std::vector<float> fMuonThresholds, fMichelThresholds;
   const float fPeakCoincWindow;
@@ -113,6 +121,8 @@ private:
   // MC Info
   const bool fUseMC;
   const std::string fMCTruthLabel;
+  const std::string fSEDLabel;
+  const std::string fSEDOutLabel;
   const bool fOnlyStopping;
   std::string fAuxDetHitLabel;
   std::vector<std::string> fAuxDetHitTags;
@@ -122,6 +132,7 @@ private:
   const float fMinLifetime;
   const float fMaxLifetime;
   const bool fSaveHists;
+  const bool fMakeTree;
   const std::vector<int> fSaveEvents;
   const bool fBinWaveform;
   const bool fVerbose;
@@ -138,6 +149,7 @@ private:
   // Other variables shared between different methods.
   geo::GeometryCore const *fGeometryService;
   std::map<int, std::vector<std::pair<int, float>>> muonMultCoatMap, michelMultCoatMap, muonMultUncoatMap, michelMultUncoatMap;
+  std::map<int, std::vector<std::pair<int, float>>> g4muonMultCoatMap, g4michelMultCoatMap, g4muonMultUncoatMap, g4michelMultUncoatMap;
 
   TTree *fTree;
 
@@ -149,10 +161,12 @@ private:
   float fMuonPeakTime;
   float fMuonPeakAmp;
   int fMichelID;
+  float fMCMichelStartX, fMCMichelStartY, fMCMichelStartZ;
   float fMichelTime, fMichelEnergy;
   float fMichelPeakAmp;
   bool fHasMichelPeak;
   float fMichelPeakTime;
+  long fMichelDepPE;
   float fMuonFitParam0;
   float fMuonFitParam1;
   float fMichelFitParam0;
@@ -162,27 +176,34 @@ private:
   std::vector<float> fRawWaveform;
   int fMCMuonG4ID;
   float fMCMuonTime;
+  float fMCMuonStartX, fMCMuonStartY, fMCMuonStartZ;
   bool fMCMuonStopping;
   bool fMCMuonEntersTPC;
   bool fMCMuonHasFlash;
-  float fMuonFlashTime, fMichelFlashTime;
+  float fMuonFlashTime, fMichelFlashTime, fCRTTime;
+
+  TTree *fTagTree;
 
   TTree *fTriggerTree;
   int fTriggerG4ID, fTriggerPDG, fTriggerPlane;
+  float fMuonRawAmp, fMichelRawAmp, fMuonSADCWAmp, fMichelSADCWAmp;
   bool fTriggerHasFlash;
   std::vector<float> fMuonMultCoat, fMichelMultCoat, fMuonMultUncoat, fMichelMultUncoat;
 
   int findChannelPair(int opChannel);
   void findMCMuons(const art::Event &e);
+  std::vector<float> CalcRunningAvg(std::vector<float> &wvf);
+  // void GaussianSmoothing(std::vector<float> &Baseline);
   std::vector<float> subtractBaseline(const std::vector<float> &waveform, const float conversionFactor);
   std::vector<float> applyRollingSum(const std::vector<float> &waveform);
   void findPeaks(const std::vector<float> &seazrchWaveform, const std::vector<float> &waveform, std::vector<std::pair<size_t, float>> &peakIndices);
-  void findPeakPairs(const std::vector<std::pair<size_t, float>> &peakIndices, const bool use_opmuons, std::vector<std::pair<size_t, size_t>> &peakPairs, int channel);
+  void findPeakPairs(const std::vector<std::pair<size_t, float>> &peakIndices, const bool use_opMuons, std::vector<std::pair<size_t, size_t>> &peakPairs, int channel);
   void findCRTTimes(const art::Event &e);
   std::vector<std::pair<float, float>> findOpMuons(art::Event &e, std::unique_ptr<std::vector<sbnd::MichelTag>> &micheltag_v, std::unique_ptr<art::Assns<recob::OpFlash, sbnd::MichelTag>> &micheltag_opflash_assn_v);
   void addPeakToMap(std::map<int, std::vector<std::pair<int, float>>> &multMap, int g4id, int opChannel, int pair_channel, float peakAmp, bool requirePositive);
   std::pair<std::vector<float>, std::vector<float>> binAndFit(const std::vector<float> &data, size_t peakIndex, int channel);
   void ConvertWaveformToHistogram(const raw::OpDetWaveform &waveform, int eventNumber);
+  void saveWaveformToHistogram(const std::vector<float> &waveform, int eventNumber, std::string suffix);
 };
 
 // Constructor
@@ -201,19 +222,23 @@ sbnd::MichelTaggerProducer::MichelTaggerProducer(fhicl::ParameterSet const &p)
       // For finding peaks in summed waveform
       fOpFlashLabels(p.get<std::vector<std::string>>("OpFlashLabels")),
       fFinderInputLabel(p.get<std::string>("FinderInputLabel")),
+      fFinderOpTypes(p.get<std::vector<std::string>>("FinderOpTypes")),
       fPMTTriggerLabel(p.get<std::string>("PMTTriggerLabel")),
       fMinPMTMultiplicity(p.get<int>("MinPMTMultiplicity", 10)),
       fFinderPolarity(p.get<float>("FinderPolarity", 1.)),
       fFindMuonThreshold(p.get<float>("FindMuonThreshold", 5000.)),
       fFindMichelPeak(p.get<float>("FindMichelPeak", 1000.)),
+      fMuonMichelMaxRatio(p.get<float>("MuonMichelMaxRatio", 1.)),
       fCRTLabel(p.get<std::string>("CRTLabel")),
       fCRTGeo(p.get<fhicl::ParameterSet>("CRTGeoParams")),
       fCRTOffset(p.get<float>("CRTOffset", 1700000.)),
       fCRTClockSpeed(p.get<float>("CRTClockspeed", 1.)),
       fCRTCoincidence(p.get<float>("CRTCoincidence")),
+      fRunningAvgSampleWidth(p.get<int>("RunningSumSampleWidth", 20)),
 
       // For finding peaks in individual waveforms
       fInputLabels(p.get<std::vector<art::InputTag>>("InputLabels")),
+      fInputOpTypes(p.get<std::vector<std::string>>("InputOpTypes")),
       fInputPolarity(p.get<std::vector<float>>("InputPolarity")),
       fMuonThresholds(p.get<std::vector<float>>("MuonThresholds")),
       fMichelThresholds(p.get<std::vector<float>>("MichelThresholds")),
@@ -225,6 +250,8 @@ sbnd::MichelTaggerProducer::MichelTaggerProducer(fhicl::ParameterSet const &p)
       // MC Info
       fUseMC(p.get<bool>("UseMC", false)),
       fMCTruthLabel(p.get<std::string>("MCTruthLabel")),
+      fSEDLabel(p.get<std::string>("SEDLabel", "ionandscint")),
+      fSEDOutLabel(p.get<std::string>("SEDOutLabel", "ionandscintout")),
       fOnlyStopping(p.get<bool>("OnlyStopping", true)),
       fAuxDetHitLabel(p.get<std::string>("AuxDetHitLabel")),
       fAuxDetHitTags(p.get<std::vector<std::string>>("AuxDetHitTags")),
@@ -234,6 +261,7 @@ sbnd::MichelTaggerProducer::MichelTaggerProducer(fhicl::ParameterSet const &p)
       fMinLifetime(p.get<float>("MinLifetime", 2000.0f)),
       fMaxLifetime(p.get<float>("MaxLifetime", 10000.)),
       fSaveHists(p.get<bool>("SaveHists", false)),
+      fMakeTree(p.get<bool>("MakeTree", false)),
       fSaveEvents(p.get<std::vector<int>>("SaveEvents")),
       fBinWaveform(p.get<bool>("BinWaveforms", false)),
       fVerbose(p.get<bool>("Verbose", false))
@@ -242,52 +270,58 @@ sbnd::MichelTaggerProducer::MichelTaggerProducer(fhicl::ParameterSet const &p)
   produces<art::Assns<recob::OpFlash, sbnd::MichelTag>>();
 
   art::ServiceHandle<art::TFileService> tfs;
-  fTree = tfs->make<TTree>("TailTree", "Waveform Producis Tree");
-  fTree->Branch("Channel", &fChannel, "Channel/I");
-  fTree->Branch("EventID", &fEventID, "EventID/I");
-  fTree->Branch("Run", &fRun, "Run/I");
-  fTree->Branch("SubRun", &fSubRun, "SubRun/I");
-  fTree->Branch("OpChannel", &fOpChannel);
-  fTree->Branch("OpChannelType", &fOpChannelType);
-  fTree->Branch("MuonPeakTime", &fMuonPeakTime);
-  fTree->Branch("MichelPeakTime", &fMichelPeakTime);
-  fTree->Branch("MuonPeakAmp", &fMuonPeakAmp);
-  fTree->Branch("MichelPeakAmp", &fMichelPeakAmp);
-  fTree->Branch("HasMichelPeak", &fHasMichelPeak);
-  fTree->Branch("MuonFitParam0", &fMuonFitParam0, "MuonFitParam0/F");
-  fTree->Branch("MuonFitParam1", &fMuonFitParam1, "MuonFitParam1/F");
-  fTree->Branch("MichelFitParam0", &fMichelFitParam0, "MichelFitParam0/F");
-  fTree->Branch("MichelFitParam1", &fMichelFitParam1, "MichelFitParam1/F");
-  fTree->Branch("BinnedWaveformMuon", &fBinnedWaveformMuon);
-  fTree->Branch("raw_waveform", &fRawWaveform);
-  fTree->Branch("BinnedWaveformMichel", &fBinnedWaveformMichel);
-  fTree->Branch("MCMuonG4ID", &fMCMuonG4ID);
-  fTree->Branch("MCMuonTime", &fMCMuonTime);
-  fTree->Branch("MCMuonStopping", &fMCMuonStopping);
-  fTree->Branch("MCMUonEntersTPC", &fMCMuonEntersTPC);
+
+  fTagTree = tfs->make<TTree>("TagTree", "sbnd::MichelTagInfo");
+  fTagTree->Branch("Run", &fRun);
+  fTagTree->Branch("Subrun", &fSubRun);
+  fTagTree->Branch("Event", &fEventID);
+  fTagTree->Branch("recomuon.time", &fMuonFlashTime);
+  fTagTree->Branch("recomuon.rawamp", &fMuonRawAmp);
+  fTagTree->Branch("recomichel.rawamp", &fMichelRawAmp);
+  fTagTree->Branch("recomuon.sadcwamp", &fMuonSADCWAmp);
+  fTagTree->Branch("recomichel.sadcwamp", &fMichelSADCWAmp);
+  fTagTree->Branch("recomichel.time", &fMichelFlashTime);
+  fTagTree->Branch("crt.plane", &fTriggerPlane);
+  fTagTree->Branch("crt.time", &fCRTTime);
+  fTagTree->Branch("recomuon.multcoat", &fMuonMultCoat);
+  fTagTree->Branch("recomichel.multcoat", &fMichelMultCoat);
+  fTagTree->Branch("recomuon.multuncoat", &fMuonMultUncoat);
+  fTagTree->Branch("recomichel.multuncoat", &fMichelMultUncoat);
 
   // Set branches
-  fTriggerTree = tfs->make<TTree>("TriggerTree", "Waveform Producers Tree");
+  fTriggerTree = tfs->make<TTree>("MCTagTree", "Waveform Producers Tree");
   fTriggerTree->Branch("Run", &fRun);
   fTriggerTree->Branch("Subrun", &fSubRun);
   fTriggerTree->Branch("Event", &fEventID);
-  fTriggerTree->Branch("G4ID", &fMCMuonG4ID);
-  fTriggerTree->Branch("mich_g4id", &fMichelID);
-  fTriggerTree->Branch("michel_energy", &fMichelEnergy);
-  fTriggerTree->Branch("michel_time", &fMichelTime);
-  fTriggerTree->Branch("is_stopping", &fMCMuonStopping);
-  fTriggerTree->Branch("Enters_tpc", &fMCMuonEntersTPC);
-  fTriggerTree->Branch("HasFlash", &fMCMuonHasFlash);
-  fTriggerTree->Branch("MuonFlashTime", &fMuonFlashTime);
-  fTriggerTree->Branch("MichelFlashTime", &fMichelFlashTime);
-  fTriggerTree->Branch("Timestamp", &fMCMuonTime);
-  fTriggerTree->Branch("CRTG4ID", &fTriggerG4ID);
-  fTriggerTree->Branch("CRTPDG", &fTriggerPDG);
-  fTriggerTree->Branch("CRTPlane", &fTriggerPlane);
-  fTriggerTree->Branch("MuonMultCoat", &fMuonMultCoat);
-  fTriggerTree->Branch("MichelMultCoat", &fMichelMultCoat);
-  fTriggerTree->Branch("MuonMultUncoat", &fMuonMultUncoat);
-  fTriggerTree->Branch("MichelMultUncoat", &fMichelMultUncoat);
+  fTriggerTree->Branch("mcmuon.g4id", &fMCMuonG4ID);
+  fTriggerTree->Branch("mcmuon.start_x", &fMCMuonStartX);
+  fTriggerTree->Branch("mcmuon.start_y", &fMCMuonStartY);
+  fTriggerTree->Branch("mcmuon.start_z", &fMCMuonStartZ);
+  fTriggerTree->Branch("mcmichel.start_x", &fMCMichelStartX);
+  fTriggerTree->Branch("mcmichel.start_y", &fMCMichelStartY);
+  fTriggerTree->Branch("mcmichel.start_z", &fMCMichelStartZ);
+  fTriggerTree->Branch("mcmuon.time", &fMCMuonTime);
+  fTriggerTree->Branch("mcmichel.g4id", &fMichelID);
+  fTriggerTree->Branch("mcmichel.energy", &fMichelEnergy);
+  fTriggerTree->Branch("mcmichel.time", &fMichelTime);
+  fTriggerTree->Branch("mcmichel.dep_pe", &fMichelDepPE);
+  fTriggerTree->Branch("mcmuon.is_stopping", &fMCMuonStopping);
+  fTriggerTree->Branch("mcmuon.enters_tpc", &fMCMuonEntersTPC);
+  fTriggerTree->Branch("hasTag", &fMCMuonHasFlash);
+  fTriggerTree->Branch("recomuon.time", &fMuonFlashTime);
+  fTriggerTree->Branch("recomuon.rawamp", &fMuonRawAmp);
+  fTriggerTree->Branch("recomichel.rawamp", &fMichelRawAmp);
+  fTriggerTree->Branch("recomuon.sadcwamp", &fMuonSADCWAmp);
+  fTriggerTree->Branch("recomichel.sadcwamp", &fMichelSADCWAmp);
+  fTriggerTree->Branch("recomichel.time", &fMichelFlashTime);
+  fTriggerTree->Branch("crt.g4id", &fTriggerG4ID);
+  fTriggerTree->Branch("crt.pdg", &fTriggerPDG);
+  fTriggerTree->Branch("crt.plane", &fTriggerPlane);
+  fTriggerTree->Branch("crt.time", &fCRTTime);
+  fTriggerTree->Branch("recomuon.multcoat", &fMuonMultCoat);
+  fTriggerTree->Branch("recomichel.multcoat", &fMichelMultCoat);
+  fTriggerTree->Branch("recomuon.multuncoat", &fMuonMultUncoat);
+  fTriggerTree->Branch("recomichel.multuncoat", &fMichelMultUncoat);
 }
 
 void sbnd::MichelTaggerProducer::produce(art::Event &e)
@@ -306,6 +340,10 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
   muonMultUncoatMap.clear();
   michelMultCoatMap.clear();
   michelMultUncoatMap.clear();
+  g4muonMultCoatMap.clear();
+  g4muonMultUncoatMap.clear();
+  g4michelMultCoatMap.clear();
+  g4michelMultUncoatMap.clear();
   fMuonMultCoat.clear();
   fMuonMultUncoat.clear();
   fMichelMultCoat.clear();
@@ -314,18 +352,29 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
   if (fUseMC)
   {
     findMCMuons(e);
-    for (auto &muon : muon_tuple_vect)
+    for (const auto &mcmuon : muon_tuple_vect)
     {
-      std::vector<std::pair<int, float>> blank_vec;
-      muonMultCoatMap.insert(std::make_pair(muon.G4ID, blank_vec));
-      michelMultCoatMap.insert(std::make_pair(muon.G4ID, blank_vec));
-      muonMultUncoatMap.insert(std::make_pair(muon.G4ID, blank_vec));
-      michelMultUncoatMap.insert(std::make_pair(muon.G4ID, blank_vec));
+      if (g4muonMultCoatMap.find(mcmuon.G4ID) == g4muonMultCoatMap.end())
+      {
+        std::vector<std::pair<int, float>> blank_vec;
+        g4muonMultCoatMap.insert(std::make_pair(mcmuon.G4ID, blank_vec));
+        g4michelMultCoatMap.insert(std::make_pair(mcmuon.G4ID, blank_vec));
+        g4muonMultUncoatMap.insert(std::make_pair(mcmuon.G4ID, blank_vec));
+        g4michelMultUncoatMap.insert(std::make_pair(mcmuon.G4ID, blank_vec));
+      }
     }
   }
-
   opMuons.clear();
   opMuons = findOpMuons(e, micheltag_v, micheltag_opflash_assn_v);
+  mf::LogInfo("MichelTag") << "Found " << opMuons.size() << "opmuons\n";
+  for (const auto &opmuon : opMuons)
+  {
+    std::vector<std::pair<int, float>> blank_vec;
+    muonMultCoatMap.insert(std::make_pair((int)opmuon.first * 1000, blank_vec));
+    michelMultCoatMap.insert(std::make_pair((int)opmuon.first * 1000, blank_vec));
+    muonMultUncoatMap.insert(std::make_pair((int)opmuon.first * 1000, blank_vec));
+    michelMultUncoatMap.insert(std::make_pair((int)opmuon.first, blank_vec));
+  }
   if (fVerbose)
   {
     std::cout << "OpMuons: \n";
@@ -339,7 +388,7 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
     std::cout << "MC Muons\n";
     for (auto &muon : muon_tuple_vect)
     {
-      std::cout << "    " << muon.G4ID << "   " << muon.Time << "   " << muon.MichelTime;
+      std::cout << "    " << muon.G4ID << "   " << muon.Time << "   " << muon.MichelTime << "   " << muon.MichelDepPE;
       if (muon.HasFlash)
         std::cout << "    TRIGGERED \n";
       else
@@ -361,8 +410,9 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
       fChannel = waveform.ChannelNumber();
       int pair_channel = findChannelPair(fChannel);
       auto opType = fPDMap.pdType(fChannel);
+      if (std::find(fInputOpTypes.begin(), fInputOpTypes.end(), opType) == fInputOpTypes.end())
+        continue;
       auto conversionFactor = (fPDMap.electronicsType(fChannel) == "daphne") ? fDaphneFreq : fCAENFreq;
-      float readoutDelay = (opType == "pmt_coated" || "pmt_uncoated") ? fPMTReadoutDelay : fARAReadoutDelay;
       unsigned opTypeIdx = std::distance(fPDs.begin(), std::find(fPDs.begin(), fPDs.end(), opType));
       muonThreshold = fMuonThresholds.at(opTypeIdx);
       michelThreshold = fMichelThresholds.at(opTypeIdx);
@@ -371,13 +421,18 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
       std::vector<float> waveformData(rawWaveformData.size(), 0.);
       std::transform(
           rawWaveformData.begin(), rawWaveformData.end(), waveformData.begin(),
-          [](short adc)
-          { return (float)adc; });
+          [polarity](short adc)
+          { return polarity * (float)adc; });
+      auto correctedWaveform = subtractBaseline(waveformData, conversionFactor);
+      // Apply rolling sum to the waveform
+      auto smooth_wvf = CalcRunningAvg(correctedWaveform);
+      auto rollingSumWaveform = applyRollingSum(correctedWaveform);
+
       nSamples = waveformData.size();
 
       // Find if a muon and michel time is within the waveform, skip if not
-      wvfEndTime = waveform.TimeStamp() - readoutDelay + nSamples * conversionFactor / 1000.;
-      wvfStartTime = waveform.TimeStamp() - readoutDelay;
+      wvfEndTime = waveform.TimeStamp() + nSamples * conversionFactor / 1000.;
+      wvfStartTime = waveform.TimeStamp();
       muonTimes.clear();
       michelTimes.clear();
 
@@ -399,11 +454,6 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
       }
 
       // Subtract baseline
-      auto correctedWaveform = subtractBaseline(waveformData, conversionFactor);
-      for (auto &adc : correctedWaveform)
-        adc *= polarity;
-      // Apply rolling sum to the waveform
-      auto rollingSumWaveform = applyRollingSum(correctedWaveform);
 
       // Find peaks
       std::vector<std::pair<size_t, float>> peakIndices;
@@ -422,8 +472,8 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
       for (const auto &[muonPeakIndex, michelPeakIndex] : peakPairs)
       {
         fHasMichelPeak = (michelPeakIndex < nSamples);
-        fMuonPeakTime = ((float)muonPeakIndex * conversionFactor / 1000.) + (float)wvfStartTime ;
-        fMichelPeakTime = (fHasMichelPeak) ? ((float)michelPeakIndex * conversionFactor / 1000.) + (float)wvfStartTime: -9999.;
+        fMuonPeakTime = ((float)muonPeakIndex * conversionFactor / 1000.) + (float)wvfStartTime;
+        fMichelPeakTime = (fHasMichelPeak) ? ((float)michelPeakIndex * conversionFactor / 1000.) + (float)wvfStartTime : -9999.;
         fMuonPeakAmp = correctedWaveform[muonPeakIndex];
         fMichelPeakAmp = correctedWaveform[michelPeakIndex];
 
@@ -435,28 +485,38 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
           for (unsigned i = (unsigned)startBin; i < (unsigned)endBin; i++)
             fRawWaveform.push_back(correctedWaveform[i]);
         }
-        sbnd::LateLightTail latelighttail;
-        latelighttail.Channel = fOpChannel;
-        latelighttail.Waveform = fRawWaveform;
-        for (auto &micheltag : *micheltag_v)
+        for (auto micheltag : *micheltag_v)
         {
-          std::cout << micheltag.MuonTime << "   " << fMuonPeakTime << "\n";
-          if (abs(micheltag.MuonTime - fMuonPeakTime) < 0.05)
+          if (abs(micheltag.MuonTime - fMuonPeakTime) > 0.05)
+            continue;
+          int muontime = (int)micheltag.MuonTime * 1000;
+          if (opType == "pmt_coated")
           {
-            std::cout << "Added latelighttail \n";
-            micheltag.LateLightTails.push_back(latelighttail);
-            break;
+            addPeakToMap(muonMultCoatMap, muontime, fChannel, pair_channel, fMuonPeakAmp, false);
+            addPeakToMap(michelMultCoatMap, muontime, fChannel, pair_channel, fMichelPeakAmp, true);
           }
-        }
+          else if (opType == "pmt_uncoated")
+          {
+            addPeakToMap(muonMultUncoatMap, muontime, fChannel, pair_channel, fMuonPeakAmp, false);
+            addPeakToMap(michelMultUncoatMap, muontime, fChannel, pair_channel, fMichelPeakAmp, true);
+          } // If PMT uncoated
+        } // Loop over sbnd::MichelTag vector
 
         fMCMuonG4ID = -9999;
         fMCMuonTime = std::numeric_limits<float>::max();
+        fMCMuonStartX = std::numeric_limits<float>::max();
+        fMCMuonStartY = std::numeric_limits<float>::max();
+        fMCMuonStartZ = std::numeric_limits<float>::max();
         fMCMuonStopping = false;
         fMCMuonEntersTPC = false;
         fMCMuonHasFlash = false;
         fMuonFlashTime = -9999.;
         fMichelFlashTime = -9999.;
         fTriggerG4ID = -1;
+        fMuonRawAmp = -9999.;
+        fMichelRawAmp = -9999.;
+        fMuonSADCWAmp = -9999.;
+        fMichelSADCWAmp = -9999.;
         if (fUseMC)
         {
           for (auto &crthit : wvfCRTHits)
@@ -476,6 +536,7 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
               {
                 fMCMuonG4ID = mcmuon.G4ID;
                 fMCMuonTime = mcmuon.Time;
+
                 fMCMuonStopping = mcmuon.Stopping;
                 fMCMuonEntersTPC = mcmuon.EntersTPC;
                 fMCMuonHasFlash = mcmuon.HasFlash;
@@ -494,159 +555,226 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
         else
           continue;
 
-        // Muon peak binning and fitting
-        std::vector<float> fMuonParams(2, 0.);
-        if (fHasMichelPeak)
-        {
-          std::tie(fBinnedWaveformMuon, fMuonParams) = binAndFit(correctedWaveform, muonPeakIndex, fChannel);
-
-          // Subtract extrapolated fit from Michel peak
-          fMuonFitParam0 = fMuonParams[0];
-          fMuonFitParam1 = fMuonParams[1];
-          for (size_t i = michelPeakIndex; i < michelPeakIndex + static_cast<size_t>(fEndTimeAfterMuon / conversionFactor); ++i)
-          {
-            float extrapolatedValueAtMichel = fMuonFitParam0 * std::exp(-(i - muonPeakIndex) * conversionFactor / fMuonFitParam1);
-            correctedWaveform[i] -= extrapolatedValueAtMichel;
-          }
-        }
-
-        // Michel peak binning and fitting
-        std::vector<float> fMichelParams;
-        std::tie(fBinnedWaveformMichel, fMichelParams) = binAndFit(correctedWaveform, michelPeakIndex, fChannel);
-        fMichelFitParam0 = fMichelParams[0];
-        fMichelFitParam1 = fMichelParams[1];
-        //        std::cout << fMichelFitParam0 << "    " << fMichelFitParam1 << "\n";
-
         // Fill the tree
         if (fTriggerG4ID < 0)
           continue;
+
         if (opType == "pmt_coated")
         {
-          addPeakToMap(muonMultCoatMap, fTriggerG4ID, fOpChannel, pair_channel, fMuonPeakAmp, false);
-          addPeakToMap(michelMultCoatMap, fTriggerG4ID, fOpChannel, pair_channel, fMichelPeakAmp, true);
+          addPeakToMap(g4muonMultCoatMap, fTriggerG4ID, fChannel, pair_channel, fMuonPeakAmp, false);
+          addPeakToMap(g4michelMultCoatMap, fTriggerG4ID, fChannel, pair_channel, fMichelPeakAmp, true);
         }
         else if (opType == "pmt_uncoated")
         {
-          addPeakToMap(muonMultUncoatMap, fTriggerG4ID, fOpChannel, pair_channel, fMuonPeakAmp, false);
-          addPeakToMap(michelMultUncoatMap, fTriggerG4ID, fOpChannel, pair_channel, fMichelPeakAmp, true);
+          addPeakToMap(g4muonMultUncoatMap, fTriggerG4ID, fChannel, pair_channel, fMuonPeakAmp, false);
+          addPeakToMap(g4michelMultUncoatMap, fTriggerG4ID, fChannel, pair_channel, fMichelPeakAmp, true);
         } // If PMT uncoated
-        fRawWaveform.clear();
-        if (fHasMichelPeak && fMichelPeakTime - fMuonPeakTime > 2.)
-        {
-          int startBin = (muonPeakIndex < 50) ? 0 : muonPeakIndex - 50;
-          int endBin = (muonPeakIndex + 4500 > nSamples) ? nSamples : muonPeakIndex + 4500;
-          for (unsigned i = (unsigned)startBin; i < (unsigned)endBin; i++)
-            fRawWaveform.push_back(correctedWaveform[i]);
-        }
-        fTree->Fill();
         if (fTriggerG4ID > 0 && fSaveHists && !peakPairs.empty() &&
             std::find(fSaveEvents.begin(), fSaveEvents.end(), fEventID) != fSaveEvents.end() &&
-            fMichelPeakTime - fMuonPeakTime > 2.)
+            fMichelPeakTime - fMuonPeakTime > 0.1)
+        {
           ConvertWaveformToHistogram(waveform, fEventID);
-      } // Loop over waveform handles
-    } // Loop over peak pairs
-
+        } // Save histograms
+      } // Loop over peak pairs
+    } // Loop over waveforms
   } // Loop over labels
 
-  // Fill Trigger Tree
-  for (auto it = muonMultCoatMap.begin(); it != muonMultCoatMap.end(); ++it)
+  // Add muon trigger mults to MichelTags
+  for (auto &micheltag : *micheltag_v)
   {
-    auto g4id = it->first;
-    fMuonMultCoat.clear();
-    fMuonMultUncoat.clear();
-    fMichelMultCoat.clear();
-    fMichelMultUncoat.clear();
+    int muontime = (int)micheltag.MuonTime * 1000;
+    auto muoncoat_v = muonMultCoatMap[muontime];
+    std::vector<float> multcoat;
+    for (auto adc : muoncoat_v)
+      multcoat.push_back(adc.second);
+    std::sort(multcoat.begin(), multcoat.end());
+    micheltag.MuonMultCoat = multcoat;
 
-    if (muonMultCoatMap.find(g4id) != muonMultCoatMap.end())
-    {
-      for (auto muon_opamp : muonMultCoatMap[g4id])
-        fMuonMultCoat.push_back(muon_opamp.second);
-    }
-    if (michelMultCoatMap.find(g4id) != michelMultCoatMap.end())
-    {
-      for (auto michel_opamp : michelMultCoatMap[g4id])
-        fMichelMultCoat.push_back(michel_opamp.second);
-    }
-    if (muonMultUncoatMap.find(g4id) != muonMultUncoatMap.end())
-    {
-      for (auto muon_opamp : muonMultUncoatMap[g4id])
-        fMuonMultUncoat.push_back(muon_opamp.second);
-    }
-    if (michelMultUncoatMap.find(g4id) != michelMultUncoatMap.end())
-    {
-      for (auto michel_opamp : michelMultUncoatMap[g4id])
-        fMichelMultUncoat.push_back(michel_opamp.second);
-    }
+    auto muonuncoat_v = muonMultUncoatMap[muontime];
+    std::vector<float> multuncoat;
+    for (auto adc : muonuncoat_v)
+      multuncoat.push_back(adc.second);
+    std::sort(multuncoat.begin(), multuncoat.end());
+    micheltag.MuonMultUncoat = multuncoat;
+  }
 
-    if (fVerbose)
+  // Fill Trigger Tree
+  if (fUseMC)
+  {
+    // Load sim::SimEnergyDeposits
+    /* art::Handle<std::vector<sim::SimEnergyDeposit>> sedHandle;
+    std::vector<art::Ptr<sim::SimEnergyDeposit>> sedVect;
+    if (e.getByLabel(fSEDLabel, sedHandle)) // Make sure artHandle is from module
+      art::fill_ptr_vector(sedVect, sedHandle);
+
+    */
+    for (auto it = g4muonMultCoatMap.begin(); it != g4muonMultCoatMap.end(); ++it)
     {
-      std::cout << "\nFound " << fMuonMultCoat.size() << " coated muon peaks for " << g4id << "\n";
-      std::cout << "Found " << fMichelMultCoat.size() << " coated michel peaks for " << g4id << "\n";
-      std::cout << "Found " << fMuonMultUncoat.size() << " uncoated muon peaks for " << g4id << "\n";
-      std::cout << "Found " << fMichelMultUncoat.size() << " uncoated michel peaks for " << g4id << "\n";
-    }
+      auto g4id = it->first;
+      fMuonMultCoat.clear();
+      fMuonMultUncoat.clear();
+      fMichelMultCoat.clear();
+      fMichelMultUncoat.clear();
 
-    std::sort(fMuonMultCoat.begin(), fMuonMultCoat.end());
-    std::sort(fMichelMultCoat.begin(), fMichelMultCoat.end());
-    std::sort(fMuonMultUncoat.begin(), fMuonMultUncoat.end());
-    std::sort(fMichelMultUncoat.begin(), fMichelMultUncoat.end());
+      if (g4muonMultCoatMap.find(g4id) != g4muonMultCoatMap.end())
+      {
+        for (auto muon_opamp : g4muonMultCoatMap[g4id])
+          fMuonMultCoat.push_back(muon_opamp.second);
+      }
+      if (g4michelMultCoatMap.find(g4id) != g4michelMultCoatMap.end())
+      {
+        for (auto michel_opamp : g4michelMultCoatMap[g4id])
+          fMichelMultCoat.push_back(michel_opamp.second);
+      }
+      if (g4muonMultUncoatMap.find(g4id) != g4muonMultUncoatMap.end())
+      {
+        for (auto muon_opamp : g4muonMultUncoatMap[g4id])
+          fMuonMultUncoat.push_back(muon_opamp.second);
+      }
+      if (g4michelMultUncoatMap.find(g4id) != g4michelMultUncoatMap.end())
+      {
+        for (auto michel_opamp : g4michelMultUncoatMap[g4id])
+          fMichelMultUncoat.push_back(michel_opamp.second);
+      }
 
-    fMichelMultCoat.erase(std::remove_if(fMichelMultCoat.begin(), fMichelMultCoat.end(),
-                                         [](float adc)
-                                         { return (adc < 100); }),
-                          fMichelMultCoat.end());
-    fMichelMultUncoat.erase(std::remove_if(fMichelMultUncoat.begin(), fMichelMultUncoat.end(),
+      if (fVerbose)
+      {
+        std::cout << "\nFound " << fMuonMultCoat.size() << " coated muon peaks for " << g4id << "\n";
+        std::cout << "Found " << fMichelMultCoat.size() << " coated michel peaks for " << g4id << "\n";
+        std::cout << "Found " << fMuonMultUncoat.size() << " uncoated muon peaks for " << g4id << "\n";
+        std::cout << "Found " << fMichelMultUncoat.size() << " uncoated michel peaks for " << g4id << "\n";
+      }
+
+      std::sort(fMuonMultCoat.begin(), fMuonMultCoat.end());
+      std::sort(fMichelMultCoat.begin(), fMichelMultCoat.end());
+      std::sort(fMuonMultUncoat.begin(), fMuonMultUncoat.end());
+      std::sort(fMichelMultUncoat.begin(), fMichelMultUncoat.end());
+
+      fMichelMultCoat.erase(std::remove_if(fMichelMultCoat.begin(), fMichelMultCoat.end(),
                                            [](float adc)
                                            { return (adc < 100); }),
-                            fMichelMultUncoat.end());
+                            fMichelMultCoat.end());
+      fMichelMultUncoat.erase(std::remove_if(fMichelMultUncoat.begin(), fMichelMultUncoat.end(),
+                                             [](float adc)
+                                             { return (adc < 100); }),
+                              fMichelMultUncoat.end());
 
-    // Fill MC info if its a muon boi
-    fMuonFlashTime = -9999.;
-    fMichelFlashTime = -9999.;
-    fMCMuonG4ID = -1;
-    fMCMuonHasFlash = false;
-    fMCMuonStopping = false;
-    fMCMuonEntersTPC = false;
-    fMichelEnergy = -9999.;
-    fMichelTime = -9999.;
-    fMichelID = false;
-    fMCMuonTime = -9999.;
-    for (auto &muon_tuple : muon_tuple_vect)
-    {
-      if (muon_tuple.G4ID == g4id)
+      // Fill MC info if its a muon boi
+      fMuonFlashTime = -9999.;
+      fMichelFlashTime = -9999.;
+      fMCMuonG4ID = -1;
+      fMCMuonStartX = -9999.;
+      fMCMuonStartY = -9999.;
+      fMCMuonStartZ = -9999.;
+      fMCMichelStartX = -9999.;
+      fMCMichelStartY = -9999.;
+      fMCMichelStartZ = -9999.;
+
+      fMCMuonHasFlash = false;
+      fMCMuonStopping = false;
+      fMCMuonEntersTPC = false;
+      fMichelEnergy = -9999.;
+      fMichelTime = -9999.;
+      fMichelID = false;
+      fMCMuonTime = -9999.;
+      for (auto &muon_tuple : muon_tuple_vect)
       {
-        fMCMuonG4ID = g4id;
-        fMCMuonTime = muon_tuple.Time;
-        fMichelID = muon_tuple.MichelG4ID;
-        fMichelTime = muon_tuple.MichelTime;
-        fMichelEnergy = muon_tuple.MichelEnergy;
-        fMCMuonStopping = muon_tuple.Stopping;
-        fMCMuonEntersTPC = muon_tuple.EntersTPC;
-        fMCMuonHasFlash = muon_tuple.HasFlash;
-        fMuonFlashTime = muon_tuple.FlashTime;
-        fMichelFlashTime = muon_tuple.MichelFlashTime;
-      }
-    }
+        if (muon_tuple.G4ID == g4id)
+        {
+          fMCMuonG4ID = g4id;
+          fMCMuonTime = muon_tuple.Time;
+          fMCMuonStartX = muon_tuple.StartX;
+          fMCMuonStartY = muon_tuple.StartY;
+          fMCMuonStartZ = muon_tuple.StartZ;
 
-    // Fill CRT Info
-    fTriggerG4ID = -1;
-    fTriggerPDG = -1;
-    fTriggerPlane = -1;
-    for (auto &crthit : crtHits)
-    {
-      if (crthit.G4ID == (unsigned)g4id)
+          fMichelID = muon_tuple.MichelG4ID;
+          fMichelTime = muon_tuple.MichelTime;
+          fMCMichelStartX = muon_tuple.MichelStartX;
+          fMCMichelStartY = muon_tuple.MichelStartY;
+          fMCMichelStartZ = muon_tuple.MichelStartZ;
+          fMichelEnergy = muon_tuple.MichelEnergy;
+          fMichelDepPE = muon_tuple.MichelDepPE;
+          fMCMuonStopping = muon_tuple.Stopping;
+          fMCMuonEntersTPC = muon_tuple.EntersTPC;
+          fMCMuonHasFlash = muon_tuple.HasFlash;
+        }
+      }
+
+      // Fill CRT Info
+      fTriggerG4ID = -1;
+      fTriggerPDG = -1;
+      fTriggerPlane = -1;
+
+      fMuonFlashTime = -9999.;
+      fMichelFlashTime = -9999.;
+      fMuonRawAmp = -9999.;
+      fMuonSADCWAmp = -9999.;
+      fMichelRawAmp = -9999.;
+      fMichelSADCWAmp = -9999.;
+
+      for (auto &crthit : crtHits)
       {
-        fTriggerG4ID = crthit.G4ID;
-        fTriggerPDG = crthit.PDG;
-        fTriggerPlane = crthit.Plane;
-        fTriggerHasFlash = crthit.HasFlash;
+        if (crthit.G4ID == (unsigned)g4id)
+        {
+          fTriggerG4ID = crthit.G4ID;
+          fTriggerPDG = crthit.PDG;
+          fTriggerPlane = crthit.Plane;
+          fCRTTime = crthit.Time;
+          fTriggerHasFlash = crthit.HasFlash;
+          if (crthit.HasFlash)
+          {
+            for (const auto &micheltag : *micheltag_v)
+            {
+              if (crthit.Plane == micheltag.CRTPlane &&
+                  abs(crthit.Time - micheltag.MuonTime) < fCRTCoincidence / 1000.)
+              {
+                fMuonFlashTime = micheltag.MuonTime;
+                fMichelFlashTime = micheltag.MichelTime;
+                fMuonRawAmp = micheltag.MuonRawAmp;
+                fMichelRawAmp = micheltag.MichelRawAmp;
+                fMuonSADCWAmp = micheltag.MuonSADCWAmp;
+                fMichelSADCWAmp = micheltag.MichelSADCWAmp;
+              }
+            }
+          }
+        }
       }
+      fTriggerTree->Fill();
+    } // Loop over g4muonMultCoatMap
+  } // If UseMC
+
+  for (const auto &micheltag : *micheltag_v)
+  {
+    mf::LogInfo("MichelTagger") << "Found Michel tag:" << "\n"
+                                << "  Muon Time   : " << micheltag.MuonTime << "\n"
+                                << "  Michel time : " << micheltag.MichelTime << "\n"
+                                << "  CRT Plane   : " << micheltag.CRTPlane << "\n"
+                                << "  Coat mult   : " << micheltag.MuonMultCoat.size() << "\n"
+                                << "  Uncoat mult : " << micheltag.MuonMultUncoat.size() << "\n"
+                                << "  Muon Raw Amp: " << micheltag.MuonRawAmp << "\n"
+                                << "  Michel RawAmp: " << micheltag.MichelRawAmp << "\n"
+                                << "  Muon SADCW   : " << micheltag.MuonSADCWAmp << "\n"
+                                << "  Michel SADCW : " << micheltag.MichelSADCWAmp << "\n";
+  }
+
+  if (fMakeTree)
+  {
+    for (const auto &tag : *micheltag_v)
+    {
+      fMuonFlashTime = tag.MuonTime;
+      fMichelFlashTime = tag.MichelTime;
+      fTriggerPlane = tag.CRTPlane;
+      fMuonRawAmp = tag.MuonRawAmp;
+      fMuonSADCWAmp = tag.MuonSADCWAmp;
+      fMichelRawAmp = tag.MichelRawAmp;
+      fMichelSADCWAmp = tag.MichelSADCWAmp;
+      fMuonMultCoat = tag.MuonMultCoat;
+      fMuonMultUncoat = tag.MuonMultUncoat;
+      fMichelMultCoat.clear();
+      fMichelMultUncoat.clear();
+      fTagTree->Fill();
     }
-
-    fTriggerTree->Fill();
-  } // Loop over MC muon_tuple_vect
-
-  // Match MichelTags to OpFlashes by time
+  }
 
   e.put(std::move(micheltag_v));
   e.put(std::move(micheltag_opflash_assn_v));
@@ -680,20 +808,29 @@ void sbnd::MichelTaggerProducer::findMCMuons(const art::Event &e)
   if (e.getByLabel(fMCTruthLabel, mctruthHandle)) // Make sure artHandle is from module
     art::fill_ptr_vector(mctruthVect, mctruthHandle);
 
+  art::Handle<std::vector<sim::SimEnergyDeposit>> sedHandle;
+  std::vector<art::Ptr<sim::SimEnergyDeposit>> sedVect;
+  if (e.getByLabel(fSEDLabel, sedHandle)) // Make sure artHandle is from module
+    art::fill_ptr_vector(sedVect, sedHandle);
+
+  art::Handle<std::vector<sim::SimEnergyDeposit>> sedoutHandle;
+  std::vector<art::Ptr<sim::SimEnergyDeposit>> sedoutVect;
+  if (e.getByLabel(fSEDOutLabel, sedoutHandle)) // Make sure artHandle is from module
+    art::fill_ptr_vector(sedoutVect, sedoutHandle);
+
   for (const auto &mcp : mctruthVect)
   {
-    if (abs(mcp->PdgCode()) != 13 || abs(mcp->T()) / 1000. > 1510.) // ||
-                                                                    // abs(mcp->EndX()) > 400. ||
-                                                                    // abs(mcp->EndY()) > 400. ||
-                                                                    // mcp->EndZ() > 700 || mcp->EndZ() < -200.)
+    if (abs(mcp->PdgCode()) != 13 || abs(mcp->T()) / 1000. > 1510.)
       continue;
     auto mu_id = mcp->TrackId();
-    bool mu_decayintpc = (abs(mcp->EndX()) < 200. &&
-                          abs(mcp->EndY()) < 200. &&
-                          mcp->EndZ() < 500. && mcp->EndZ() > 0.);
-    if (fOnlyStopping && !mu_decayintpc)
-      continue;
+    bool mu_decayintpc = (abs(mcp->EndX()) < 185. &&
+                          abs(mcp->EndY()) < 185. &&
+                          mcp->EndZ() < 485. && mcp->EndZ() > 15.);
     float mu_time = std::numeric_limits<float>::max();
+    float mu_x = std::numeric_limits<float>::max();
+    float mu_y = std::numeric_limits<float>::max();
+    float mu_z = std::numeric_limits<float>::max();
+
     bool mu_enterstpc = false;
     for (unsigned i = 0; i < mcp->NumberTrajectoryPoints(); i++)
     {
@@ -703,27 +840,71 @@ void sbnd::MichelTaggerProducer::findMCMuons(const art::Event &e)
       {
         mu_time = mcp->T(i) / 1000.;
         mu_enterstpc = true;
+        mu_x = mcp->Position(i).X();
+        mu_y = mcp->Position(i).Y();
+        mu_z = mcp->Position(i).Z();
         break;
       }
     }
     int michel_id = -1;
     float michel_time = -9999.;
     float michel_energy = -9999.;
-    for (auto &mcp2 : mctruthVect)
+    long michel_dep_pe = 0;
+    float michel_x = std::numeric_limits<float>::max();
+    float michel_y = std::numeric_limits<float>::max();
+    float michel_z = std::numeric_limits<float>::max();
+
+    if (mcp->EndProcess() == "Decay")
     {
-      if (mcp2->Mother() != mcp->TrackId() ||
-          (mcp2->Position() - mcp->EndPosition()).Mag() > 10. ||
-          abs(mcp2->PdgCode()) != 11)
-        continue;
-      michel_id = mcp2->TrackId();
-      michel_time = mcp2->T() / 1000.;
-      michel_energy = mcp2->E() * 1000.;
-    }
-    // if (michel_energy < 0.)
+      for (auto &mcp2 : mctruthVect)
+      {
+        if (mcp2->Mother() != mcp->TrackId() ||
+            (mcp2->Position() - mcp->EndPosition()).Mag() > 5. ||
+            abs(mcp2->PdgCode()) != 11)
+          continue;
+        michel_id = mcp2->TrackId();
+        michel_time = mcp2->T() / 1000.;
+        michel_x = mcp2->Position().X();
+        michel_y = mcp2->Position().Y();
+        michel_z = mcp2->Position().Z();
+        michel_energy = mcp2->E() * 1000.;
+        if (mu_decayintpc)
+        {
+          auto sed_part = std::partition(sedVect.begin(), sedVect.end(),
+                                         [michel_id](art::Ptr<sim::SimEnergyDeposit> &sed)
+                                         { return (sed->TrackID() == michel_id); });
+
+          int n_sed = 0;
+          for (auto sed_it = sedVect.begin(); sed_it != sed_part; sed_it++)
+          {
+            auto sed = *sed_it;
+            michel_dep_pe += sed->NumPhotons();
+            n_sed++;
+          }
+        }
+        else
+        {
+          auto sed_part = std::partition(sedoutVect.begin(), sedoutVect.end(),
+                                         [michel_id](art::Ptr<sim::SimEnergyDeposit> &sed)
+                                         { return (sed->TrackID() == michel_id); });
+
+          int n_sed = 0;
+          for (auto sed_it = sedoutVect.begin(); sed_it != sed_part; sed_it++)
+          {
+            auto sed = *sed_it;
+            michel_dep_pe += sed->NumPhotons();
+            n_sed++;
+          }
+        } // if (michel_energy < 0.)
+      } // Michel loop
+    } // Check if muon decays
     //   continue;
     if (!mu_enterstpc)
     {
       mu_time = mcp->T() / 1000.;
+      mu_x = mcp->Position().X();
+      mu_y = mcp->Position().Y();
+      mu_z = mcp->Position().Z();
     }
     if (michel_time - mu_time < fMinLifetime / 1000.)
     {
@@ -734,9 +915,17 @@ void sbnd::MichelTaggerProducer::findMCMuons(const art::Event &e)
     mcmuon.Time = mu_time;
     mcmuon.MichelG4ID = michel_id;
     mcmuon.MichelTime = michel_time;
+    mcmuon.MichelDepPE = michel_dep_pe;
     mcmuon.MichelEnergy = michel_energy;
     mcmuon.Stopping = mu_decayintpc;
     mcmuon.EntersTPC = mu_enterstpc;
+    mcmuon.StartX = mu_x;
+    mcmuon.StartY = mu_y;
+    mcmuon.StartZ = mu_z;
+    mcmuon.MichelStartX = michel_x;
+    mcmuon.MichelStartY = michel_y;
+    mcmuon.MichelStartZ = michel_z;
+
     mcmuon.HasFlash = false;
     mcmuon.FlashTime = -9999.;
     mcmuon.MichelFlashTime = -9999.;
@@ -747,6 +936,92 @@ void sbnd::MichelTaggerProducer::findMCMuons(const art::Event &e)
             { return (muon2.Time > muon1.Time); });
 }
 
+std::vector<float> sbnd::MichelTaggerProducer::CalcRunningAvg(std::vector<float> &wvf)
+{
+  // int index =0;
+  double Median = 0.;
+  // Bury a nested loop in a thing Im not sure is any faster
+  std::vector<float> Baseline(wvf.size());
+  std::vector<float> smooth_wvf(wvf.size(), 0.);
+  for (int i = 0; i < int(wvf.size()) - fRunningAvgSampleWidth; i++)
+  {
+    int EndIndex = i + fRunningAvgSampleWidth;
+    double sum = 0;
+    for (int j = i; j < EndIndex; j++)
+    {
+      if (wvf[j] < Median - 40)
+        sum = sum + wvf[j]; // mask out pulses
+      else
+        sum = sum + Median;
+    }
+    Baseline[i] = sum / (EndIndex - i);
+  } // CalcAvgBaseline
+  // std::for_each(Baseline.begin(), Baseline.begin()+(wvf.size()-fRunningAvgSampleWidth), [wvf, &index, this](int& Val)
+  //           {
+  //           Val = std::accumulate(wvf.begin()+index, wvf.begin()+index+fRunningAvgSampleWidth, 0)/fRunningAvgSampleWidth;
+  //           index = index+1;
+  //           } );
+  for (int i = int(wvf.size()) - fRunningAvgSampleWidth; i < int(wvf.size()); i++)
+  {
+    int EndIndex = i + fRunningAvgSampleWidth;
+    if (EndIndex > int(wvf.size()))
+      EndIndex = int(wvf.size());
+    double sum = 0;
+    for (int j = i; j < EndIndex; j++)
+    {
+      if (wvf[j] < Median - 40)
+        sum = sum + wvf[j]; // mask out pulses
+      else
+        sum = sum + Median;
+    }
+    Baseline[i] = sum / (EndIndex - i);
+  }
+  for (unsigned i = 0; i < wvf.size(); i++)
+    smooth_wvf[i] -= Baseline[i];
+  // Baseline is all updated an can return
+  return smooth_wvf;
+}
+/*
+void sbnd::MichelTaggerProducer::GaussianSmoothing(std::vector<float> &Baseline)
+{
+  std::vector<int> Out(Baseline.size());
+  std::vector<int> X(fGuassianConvlSize * 2 + 1);
+  std::iota(X.begin(), X.end(), -fGuassianConvlSize);
+  std::vector<double> Weights(fGuassianConvlSize * 2 + 1);
+  double sum = 0;
+  for (int i = 0; i < int(Weights.size()); i++)
+  {
+    Weights[i] = TMath::Exp(-TMath::Power(double(X[i]), 2.0) / (2 * TMath::Power(double(fGaussianConvlWidth), 2.0)));
+    sum += Weights[i];
+  }
+  // Now do the convolution
+  for (int i = fGuassianConvlSize + 1; i < int(Baseline.size()) - (fGuassianConvlSize + 1); i++)
+  {
+    double PointSum = 0;
+    std::for_each(X.begin(), X.end(), [&PointSum, i, Weights, Baseline, this](int Index)
+                  { PointSum += Baseline[i + Index] * Weights[fGuassianConvlSize + Index]; });
+    Out[i] = PointSum;
+  }
+  // Handle edges properly
+  for (int i = 0; i < fGuassianConvlSize + 1; i++)
+  {
+    double PointSum = 0;
+    std::for_each(X.begin() + fGuassianConvlSize - i, X.end(), [&PointSum, i, Weights, Baseline, this](int Index)
+                  { PointSum += Baseline[i + Index] * Weights[fGuassianConvlSize + Index]; });
+    Out[i] = PointSum;
+  }
+  for (int i = int(Baseline.size()) - (fGuassianConvlSize + 1); i < int(Baseline.size()); i++)
+  {
+    double PointSum = 0;
+    std::for_each(X.begin(), X.begin() + fGuassianConvlSize - (i - int(Baseline.size())), [&PointSum, i, Weights, Baseline, this](int Index)
+                  { PointSum += Baseline[i + Index] * Weights[fGuassianConvlSize + Index]; });
+    Out[i] = PointSum;
+  }
+  // Finally copy out to baseline
+  for (int i = 0; i < int(Baseline.size()); i++)
+    Baseline[i] = Out[i] / sum;
+} // Gaussian Smoothin
+*/
 std::vector<float> sbnd::MichelTaggerProducer::subtractBaseline(const std::vector<float> &waveform, const float conversionFactor)
 {
   // Calculate baseline (mean of the first 100 ns)
@@ -801,7 +1076,7 @@ void sbnd::MichelTaggerProducer::findPeaks(
 
 void sbnd::MichelTaggerProducer::findPeakPairs(
     const std::vector<std::pair<size_t, float>> &peakIndices,
-    const bool use_opmuons,
+    const bool use_opMuons,
     std::vector<std::pair<size_t, size_t>> &peakPairs,
     int channel = 6)
 {
@@ -809,7 +1084,7 @@ void sbnd::MichelTaggerProducer::findPeakPairs(
   std::vector<std::pair<size_t, size_t>> muon_windows, michel_windows;
   size_t mu_coincidence_window, michel_coincidence_window;
   std::vector<float> muon_times, michel_times;
-  if (!use_opmuons)
+  if (!use_opMuons)
   {
     mu_coincidence_window = (size_t)(fCRTCoincidence / conversionFactor);
     michel_coincidence_window = (size_t)((fMaxLifetime - fMinLifetime) / (2. * conversionFactor));
@@ -880,7 +1155,8 @@ void sbnd::MichelTaggerProducer::findPeakPairs(
       }
       // If new tallest peak in michel window
       if (peakIndices[i_peak].first > michel_windows[i_mu].first && peakIndices[i_peak].first < michel_windows[i_mu].second &&
-          peakIndices[i_peak].second > michel_peak2 && peakIndices[i_peak].second > michelThreshold)
+          peakIndices[i_peak].second > michel_peak2 && peakIndices[i_peak].second > michelThreshold &&
+          (peakIndices[i_peak].second < fMuonMichelMaxRatio * mu_peak || use_opMuons))
       {
         if (peakIndices[i_peak].second > michel_peak)
         {
@@ -1031,17 +1307,17 @@ std::vector<std::pair<float, float>> sbnd::MichelTaggerProducer::findOpMuons(
     float waveformEnd = waveformStart + waveform.Waveform().size() / 500.0; // Example frequency of 500 Hz
     auto opChannel = waveform.ChannelNumber();
     auto channelType = fPDMap.pdType(opChannel);
+    if (std::find(fFinderOpTypes.begin(), fFinderOpTypes.end(), channelType) == fFinderOpTypes.end())
+      continue;
     if (channelType == "pmt_coated" || channelType == "pmt_uncoated")
       readoutDelay = fPMTReadoutDelay;
     else
       readoutDelay = fARAReadoutDelay;
-   
 
     startTime = std::min(startTime, waveformStart);
     endTime = std::max(endTime, waveformEnd);
   }
-  startTime -= readoutDelay;
-  endTime -= readoutDelay;
+
   if (fVerbose)
     std::cout << "StartTime: " << startTime << "    End Time: " << endTime << "\n";
   wvfStartTime = startTime;
@@ -1049,18 +1325,18 @@ std::vector<std::pair<float, float>> sbnd::MichelTaggerProducer::findOpMuons(
   wvfCRTHits.clear();
   for (auto crthit : crtHits)
   {
-    if (crthit.Time < endTime && crthit.Time > startTime)
+    if (crthit.Time < endTime - readoutDelay && crthit.Time > startTime - readoutDelay)
     {
       wvfCRTHits.push_back(crthit);
       if (fUseMC)
       {
         std::vector<std::pair<int, float>> blank_vec;
-        if (muonMultCoatMap.find(crthit.PDG) == muonMultCoatMap.end())
+        if (g4muonMultCoatMap.find(crthit.G4ID) == g4muonMultCoatMap.end())
         {
-          muonMultCoatMap.insert(std::make_pair(crthit.G4ID, blank_vec));
-          muonMultUncoatMap.insert(std::make_pair(crthit.G4ID, blank_vec));
-          michelMultCoatMap.insert(std::make_pair(crthit.G4ID, blank_vec));
-          michelMultUncoatMap.insert(std::make_pair(crthit.G4ID, blank_vec));
+          g4muonMultCoatMap.insert(std::make_pair(crthit.G4ID, blank_vec));
+          g4muonMultUncoatMap.insert(std::make_pair(crthit.G4ID, blank_vec));
+          g4michelMultCoatMap.insert(std::make_pair(crthit.G4ID, blank_vec));
+          g4michelMultUncoatMap.insert(std::make_pair(crthit.G4ID, blank_vec));
         }
       }
     }
@@ -1070,8 +1346,8 @@ std::vector<std::pair<float, float>> sbnd::MichelTaggerProducer::findOpMuons(
   std::vector<float> cumulativeWaveform(waveformSize, 0);
   nSamples = waveformSize;
 
-  auto pmttriggerHandle = e.getValidHandle<std::vector<sbnd::comm::pmtTrigger>>(fPMTTriggerLabel);
-  auto pmtTrigger = (*pmttriggerHandle)[0];
+  // auto pmttriggerHandle = e.getValidHandle<std::vector<sbnd::comm::pmtTrigger>>(fPMTTriggerLabel);
+  // auto pmtTrigger = (*pmttriggerHandle)[0];
   // Second loop: Process and accumulate the waveforms
   for (auto const &waveform : *waveforms)
   {
@@ -1080,8 +1356,9 @@ std::vector<std::pair<float, float>> sbnd::MichelTaggerProducer::findOpMuons(
     std::transform(raw_wf.begin(), raw_wf.end(), wf.begin(),
                    [](short adc)
                    { return (float)adc; });
+    unsigned int startBin = static_cast<unsigned int>((waveform.TimeStamp() - (startTime)) * 500);
     auto wf_corrected = subtractBaseline(wf, 2.);
-    unsigned int startBin = static_cast<unsigned int>((waveform.TimeStamp() - (startTime + readoutDelay)) * 500);
+
     for (size_t i = 0; i < wf.size(); ++i)
     {
       if (startBin + i < cumulativeWaveform.size())
@@ -1090,50 +1367,62 @@ std::vector<std::pair<float, float>> sbnd::MichelTaggerProducer::findOpMuons(
       }
     }
   }
+  auto smooth_wvf = CalcRunningAvg(cumulativeWaveform);
   auto rollingSum = applyRollingSum(cumulativeWaveform);
   std::vector<std::pair<size_t, float>> peakMap;
-  findPeaks(rollingSum, cumulativeWaveform, peakMap);
+  findPeaks(rollingSum, smooth_wvf, peakMap);
+  mf::LogInfo("MichelTag") << "Found " << peakMap.size() << " peaks\n";
   std::vector<std::pair<size_t, size_t>> peakPairs;
   findPeakPairs(peakMap, false, peakPairs);
+  mf::LogInfo("MichelTag") << "Found " << peakPairs.size() << " peak pairs\n";
   std::vector<std::pair<float, float>> peakPairTimes;
   for (auto peakpair : peakPairs)
   {
-    auto mult_win = (int)(peakpair.first / 4.);
-    auto mult_win_min = std::max(0, mult_win - 30);
-    auto mult_win_max = std::min((int)pmtTrigger.numPassed.size(), mult_win + 30);
-    auto muon_mult = *max_element(pmtTrigger.numPassed.begin() + mult_win_min, pmtTrigger.numPassed.begin() + mult_win_max);
-    if (muon_mult < fMinPMTMultiplicity)
-      continue;
+    // auto mult_win = (int)(peakpair.first / 4.);
+    // auto mult_win_min = std::max(0, mult_win - 30);
+    // auto mult_win_max = std::min((int)pmtTrigger.numPassed.size(), mult_win + 30);
+    // auto muon_mult = *max_element(pmtTrigger.numPassed.begin() + mult_win_min, pmtTrigger.numPassed.begin() + mult_win_max);
+    // if (muon_mult < fMinPMTMultiplicity)
+    //   continue;
     float muontime = (float)peakpair.first / 500. + startTime;
     float micheltime = (float)peakpair.second / 500. + startTime;
     peakPairTimes.push_back(std::make_pair(muontime, micheltime));
     MichelTag micheltag_trigger;
     micheltag_trigger.MuonTime = muontime;
     micheltag_trigger.MichelTime = micheltime;
-    micheltag_trigger.MuonMult = muon_mult;
+    micheltag_trigger.MuonRawAmp = smooth_wvf[peakpair.first];
+    micheltag_trigger.MichelRawAmp = smooth_wvf[peakpair.second];
+    micheltag_trigger.MuonSADCWAmp = rollingSum[peakpair.first];
+    micheltag_trigger.MichelSADCWAmp = rollingSum[peakpair.second];
+    // micheltag_trigger.MuonMult = muon_mult;
     for (auto &crthit : crtHits)
     {
-      if (abs(crthit.Time - muontime) * 1000. < fCRTClockSpeed)
-        crthit.HasFlash = true;
-      micheltag_trigger.CRTPlane = crthit.Plane;
-      if (fUseMC)
+      if (abs(crthit.Time - muontime) * 1000. < fCRTCoincidence)
       {
-        micheltag_trigger.G4ID = crthit.G4ID;
-        micheltag_trigger.G4PDG = crthit.PDG;
-      }
-    }
+        crthit.HasFlash = true;
+        micheltag_trigger.CRTPlane = crthit.Plane;
+        if (fUseMC)
+        {
+          micheltag_trigger.G4ID = crthit.G4ID;
+          micheltag_trigger.G4PDG = crthit.PDG;
+        } // UseMC
+      } // If crthit is time coincident with muon flash
+    } // CRTHit loop
     micheltag_v->push_back(micheltag_trigger);
 
     // Add associations to OpFlashes within 50ns
-    for(const auto& opfTag : fOpFlashLabels) {
-      auto const & flash_h = e.getValidHandle<std::vector<recob::OpFlash>>(opfTag);
-      if(!flash_h.isValid() || flash_h->empty()) 
+    for (const auto &opfTag : fOpFlashLabels)
+    {
+      auto const &flash_h = e.getValidHandle<std::vector<recob::OpFlash>>(opfTag);
+      if (!flash_h.isValid() || flash_h->empty())
         mf::LogInfo("MichelTagger") << "Don't have good flashes from producer " << opfTag << "\n";
       std::vector<art::Ptr<recob::OpFlash>> _opflash_ptr_v;
       art::fill_ptr_vector(_opflash_ptr_v, flash_h);
 
-      for(const auto flash : _opflash_ptr_v){
-        if(abs(flash->Time() - micheltag_trigger.MuonTime) > 0.05) continue;
+      for (const auto flash : _opflash_ptr_v)
+      {
+        if (abs(flash->Time() - (micheltag_trigger.MuonTime - readoutDelay)) > 0.05)
+          continue;
         util::CreateAssn(*this, e, *micheltag_v, flash, *micheltag_opflash_assn_v);
       }
     }
@@ -1149,6 +1438,27 @@ std::vector<std::pair<float, float>> sbnd::MichelTaggerProducer::findOpMuons(
           muon.MichelFlashTime = micheltime;
         }
       }
+    }
+    if (fSaveHists && std::find(fSaveEvents.begin(), fSaveEvents.end(), fEventID) != fSaveEvents.end())
+    {
+      unsigned hist_wvf_start = (peakpair.first > 200) ? peakpair.first - 200 : 0;
+      unsigned hist_wvf_end = (peakpair.second + 2000 > nSamples - 1) ? nSamples - 1 : peakpair.second + 2000;
+      std::stringstream suffix_stream;
+      suffix_stream << "raw_" << peakpair.first;
+      std::vector<float> wvf_slice(hist_wvf_end - hist_wvf_start);
+      for (auto i = hist_wvf_start; i < hist_wvf_end; i++)
+        wvf_slice[i - hist_wvf_start] = cumulativeWaveform[i];
+      saveWaveformToHistogram(wvf_slice, fEventID, suffix_stream.str());
+      std::stringstream suffix_stream_sadcw;
+      suffix_stream_sadcw << "sadcw_" << peakpair.first;
+      for (auto i = hist_wvf_start; i < hist_wvf_end; i++)
+        wvf_slice[i - hist_wvf_start] = rollingSum[i];
+      saveWaveformToHistogram(wvf_slice, fEventID, suffix_stream_sadcw.str());
+      std::stringstream suffix_stream_smooth;
+      suffix_stream_smooth << "smooth_" << peakpair.first;
+      for (auto i = hist_wvf_start; i < hist_wvf_end; i++)
+        wvf_slice[i - hist_wvf_start] = smooth_wvf[i];
+      saveWaveformToHistogram(wvf_slice, fEventID, suffix_stream_smooth.str());
     }
   }
   return peakPairTimes;
@@ -1237,26 +1547,55 @@ void sbnd::MichelTaggerProducer::ConvertWaveformToHistogram(const raw::OpDetWave
   int channel = waveform.ChannelNumber();
   auto opType = fPDMap.pdType(fChannel);
   auto conversionFactor = (fPDMap.electronicsType(channel) == "daphne") ? fDaphneFreq : fCAENFreq;
-  int start_bin = (int)((fMuonPeakTime + 0.4 - waveform.TimeStamp()) * 1000. / conversionFactor);
-  ;
-  int end_bin = (int)((fMuonPeakTime + 2. - waveform.TimeStamp()) * 1000. / conversionFactor);
+  int start_bin = (fMuonPeakTime - waveform.TimeStamp() > 0.2) ? (int)(((fMuonPeakTime - 0.2) - waveform.TimeStamp()) * 1000. / conversionFactor) : 0;
+  int end_bin = (int)(((fMichelPeakTime + 1.) - waveform.TimeStamp()) * 1000. / conversionFactor);
   // Get the channel number
-  float timestamp = waveform.TimeStamp();                   // Get the timestamp
   const std::vector<short> &waveData = waveform.Waveform(); // Get the waveform data (amplitudes)
-  // int numSamples = waveData.size();                         // Get the number of waveform samples
+  // int numSamples = waveData.size();
+  if ((int)waveData.size() < end_bin)
+    end_bin = waveData.size() - 1;
+  // Get the number of waveform samples
   int numSamples = end_bin - start_bin;
 
   // Create a unique histogram name using channel number, event number, and timestamp
   std::stringstream histName;
-  histName << "waveform_ch" << channel << "_evt" << eventNumber << "_ts" << (size_t)timestamp * 1000;
+  histName << "waveform_ch" << channel << "_evt" << eventNumber << "_ts_" << (size_t)fMuonPeakTime * 1000;
 
   // Create the histogram with an appropriate binning (one bin per sample)
-  TH1F *hist = tfs->make<TH1F>(histName.str().c_str(), histName.str().c_str(), numSamples, fMuonPeakTime + 0.4, fMuonPeakTime + 2.);
+  TH1F *hist = tfs->make<TH1F>(histName.str().c_str(), histName.str().c_str(), numSamples, start_bin * conversionFactor / 1000., end_bin * conversionFactor / 1000.);
 
   // Fill the histogram with the waveform data
   for (int i = start_bin; i < numSamples; ++i)
   {
     hist->SetBinContent(i + 1 - start_bin, waveData[i]); // Set bin content (ROOT bins start at 1)
+  }
+
+  // Optionally, set axis labels (if needed)
+  hist->GetXaxis()->SetTitle("Sample Number");
+  hist->GetYaxis()->SetTitle("Amplitude");
+}
+
+void sbnd::MichelTaggerProducer::saveWaveformToHistogram(const std::vector<float> &waveform, int eventNumber, std::string suffix)
+{
+  art::ServiceHandle<art::TFileService> tfs;
+  // Retrieve necessary information from the waveform
+  int start_bin = 0;
+  int end_bin = waveform.size();
+  // Get the channel number
+  // int numSamples = waveData.size();                         // Get the number of waveform samples
+  int numSamples = end_bin - start_bin;
+
+  // Create a unique histogram name using channel number, event number, and timestamp
+  std::stringstream histName;
+  histName << "sumwaveform_evt_" << eventNumber << "_" << suffix;
+
+  // Create the histogram with an appropriate binning (one bin per sample)
+  TH1F *hist = tfs->make<TH1F>(histName.str().c_str(), histName.str().c_str(), numSamples, 0, numSamples);
+
+  // Fill the histogram with the waveform data
+  for (int i = start_bin; i < numSamples; ++i)
+  {
+    hist->SetBinContent(i + 1, waveform[i]); // Set bin content (ROOT bins start at 1)
   }
 
   // Optionally, set axis labels (if needed)

@@ -32,6 +32,11 @@ physics.analyzers:      @local::sbnd_reco1_analyzers
 physics.ana:            @local::sbnd_reco1_analyzer_sequence
 physics.end_paths:      [ @sequence::physics.end_paths, ana ]
 
+physics.producers.micheltagraw.FinderInputLabel: "opdaq"
+physics.producers.micheltagraw.FinderPolarity: -1.
+physics.producers.micheltagraw.InputLabels: ["opdaq"]
+physics.producers.micheltagraw.InputPolarity: [-1., -1.]
+
 #outputs table overrides
 outputs.out1.dataTier:       "reconstructed"
 outputs.out1.outputCommands:  [@sequence::outputs.out1.outputCommands, @sequence::sbnd_reco1_drops]

@@ -14,6 +14,8 @@ physics.simulate: [ rns
                   # , simdrift #1D drift sim no longer run
                   , michelfilter # Adding filter
                   , mcreco
+                  , genericcrt
+                  ,simplemerge
                 ]
 
 

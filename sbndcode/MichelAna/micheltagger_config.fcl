@@ -4,37 +4,40 @@
 
 BEGIN_PROLOG
 
-LateLightProducer:
+MichelTaggerProducer:
 {
   # Constants. These shouldn't need to be changed
-  module_type: "LateLightProducer"
+  module_type: "MichelTaggerProducer"
   Pair1: @local::pmtTriggerProducer.Pair1
   Pair2: @local::pmtTriggerProducer.Pair2
   Unpaired: @local::pmtTriggerProducer.Unpaired
-  PDs: ["pmt_coated", "pmt_uncoated", "xarapuca_vuv", "xarapuca_vis"]
+  PDs: ["pmt_coated", "pmt_uncoated"] #  "xarapuca_vuv", "xarapuca_vis"]
   DaphneFreq: 12.5	# ns per bin
   CAENFreq:   2.	# ns per bin
   PMTReadoutDelay: @local::SBNDDecoSimpleFlashTPC1.ReadoutDelay               # [us] Subtracts this from any PMT  waveform
   XARAPUCAReadoutDelay: @local::SBNDDecoSimpleFlashTPC1Arapuca.ReadoutDelay   # [us] Subtracts this from any XARAPUCA timestamp
 
   # Find candidate muon and michel flashes (summed waveform)
+  OpFlashLabels: []
   FinderInputLabel: "opdecopmt"
+  FinderOpTypes: ["pmt_coated", "pmt_uncoated"]
   PMTTriggerLabel: "pmttrigger"
   MinPMTMultiplicity: 10
   FinderPolarity: 1.  # -1 or 1. -1 flips the waveform.
-  FindMuonThreshold: 10000.  # Min ADC for candidate muon peak
-  FindMichelPeak: 1000.      # Min Michel peak height as fraction of muon peak
+  FindMuonThreshold: 1000.  # Min ADC for candidate muon peak
+  FindMichelPeak: 100.      # Min Michel peak height as fraction of muon peak
+  MuonMichelMaxRatio: 0.7
   CRTLabel: "crtsim"
   CRTGeoParams: @local::crtgeoalg_sbnd
   CRTOffset: 1700000.
   CRTClockSpeed: 1.
-  CRTCoincidence: 240. # [ns] Search for muon hits within this scope of a valid CRT hit
+  CRTCoincidence: 300.
+  RunningSumSampleWidth: 10
 
-  # Find peaks in individual waveforms
-  OpFlashLabels: ["opflashtpc0", "opflashtpc1", "opflashtpc0xarapuca", "opflashtpc1xarapuca"]
   InputLabels: ["opdecopmt"]
-  InputPolarity: [ 1. ]   # -1 or 1. -1 flips the waveform
-  MuonThresholds: [ 125., 75., 50., 50.]  # Min ADC for a muon peak for each detector type
+  InputOpTypes: ["pmt_coated", "pmt_uncoated"]
+  InputPolarity: [1., 1.]
+  MuonThresholds: [125., 75., 50., 50.]
   MichelThresholds: [ 125., 75., 50., 50.]  # Min ADC for a Michel peak for each detector type
   PeakCoincWindow: 80. # [ns] Search window relative to each candidate muon/michel peak
   TimeBinWidth: 100.        # Width of bins [ns]
@@ -44,19 +47,21 @@ LateLightProducer:
   # MC Info
   UseMC: true
   MCTruthLabel: "largeant"
+  SEDLabel: "ionandscint"
+  SEDOutLabel: "ionandscintout"
   OnlyStopping: false  // Only use muons that stop in the TPC
   AuxDetHitLabel: "largeant"
   AuxDetHitTags: ["LArG4DetectorServicevolAuxDetSensitiveCRTStripX", "LArG4DetectorServicevolAuxDetSensitiveCRTStripY"]
 
   # Misc - change these, I dare you
-   RequireMichel: false        // requires Michel and Muon hit in same waveform to sav
+  RequireMichel: true        // requires Michel and Muon hit in same waveform to sav
   MinLifetime: 10. # ns Min mu lifetime, appllies to peak pairing and MC
   MaxLifetime: 10000.
-  SaveHists: false
+  SaveHists: true
+  MakeTree: false
   SaveEvents: [1]
   BinWaveforms: false
   Verbose: false
 }
-
 
 END_PROLOG

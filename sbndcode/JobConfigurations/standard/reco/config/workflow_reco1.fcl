@@ -10,6 +10,7 @@
 #include "cluster_sbnd.fcl"
 #include "numberofhitsfilter_sbnd.fcl"
 #include "mctrutht0matching.fcl"
+#include "micheltagger_config.fcl"
 
 BEGIN_PROLOG
 
@@ -48,6 +49,10 @@ sbnd_reco1_producers:{
     ### CRT reconstruction
     crtstrips:      @local::crtstriphitproducer_sbnd
 
+    ### Michel Tagger
+    micheltagraw: @local::MichelTaggerProducer
+    micheltagdeco: @local::MichelTaggerProducer
+
     ### ML reco inputs
     cluster3d: @local::sbnd_cluster3d
 }
@@ -65,6 +70,8 @@ sbnd_reco1_producer_sequence: [
   , gaushit
   , gaushitTruthMatch
   , crtstrips
+  , micheltagraw
+  , micheltagdeco
   , cluster3d
  ]
 
