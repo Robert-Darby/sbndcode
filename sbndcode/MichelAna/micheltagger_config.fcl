@@ -21,7 +21,7 @@ MichelTaggerProducer:
   OpFlashLabels: []
   FinderInputLabel: "opdecopmt"
   FinderOpTypes: ["pmt_coated", "pmt_uncoated"]
-  PMTTriggerLabel: "pmttrigger"
+  PMTTriggerLabel: "pmttriggerproducer"
   MinPMTMultiplicity: 10
   FinderPolarity: 1.  # -1 or 1. -1 flips the waveform.
   FindMuonThreshold: 1000.  # Min ADC for candidate muon peak

@@ -66,10 +66,11 @@ public:
   {
     int G4ID;
     float StartX, StartY, StartZ;
-    float Time;
+    float Time, RawAmp, SADCWAmp;
+    int Mult, MichelMult;
     int MichelG4ID;
     float MichelStartX, MichelStartY, MichelStartZ;
-    float MichelEnergy, MichelTime;
+    float MichelEnergy, MichelTime, MichelRawAmp, MichelSADCWAmp;
     long MichelDepPE;
     // float MichelTime, MichelEnergy;
     float FlashTime, MichelFlashTime;
@@ -181,12 +182,17 @@ private:
   bool fMCMuonEntersTPC;
   bool fMCMuonHasFlash;
   float fMuonFlashTime, fMichelFlashTime, fCRTTime;
+  int fMuonMult;
 
   TTree *fTagTree;
 
   TTree *fTriggerTree;
   int fTriggerG4ID, fTriggerPDG, fTriggerPlane;
   float fMuonRawAmp, fMichelRawAmp, fMuonSADCWAmp, fMichelSADCWAmp;
+  float fMCMuonRawAmp, fMCMuonSADCWAmp;
+  int fMCMichelMult;
+  int fMCMuonMult;
+  float fMCMichelSADCWAmp, fMCMichelRawAmp;
   bool fTriggerHasFlash;
   std::vector<float> fMuonMultCoat, fMichelMultCoat, fMuonMultUncoat, fMichelMultUncoat;
 
@@ -283,6 +289,7 @@ sbnd::MichelTaggerProducer::MichelTaggerProducer(fhicl::ParameterSet const &p)
   fTagTree->Branch("recomichel.time", &fMichelFlashTime);
   fTagTree->Branch("crt.plane", &fTriggerPlane);
   fTagTree->Branch("crt.time", &fCRTTime);
+  fTagTree->Branch("recomuon.mult", &fMuonMult);
   fTagTree->Branch("recomuon.multcoat", &fMuonMultCoat);
   fTagTree->Branch("recomichel.multcoat", &fMichelMultCoat);
   fTagTree->Branch("recomuon.multuncoat", &fMuonMultUncoat);
@@ -309,10 +316,15 @@ sbnd::MichelTaggerProducer::MichelTaggerProducer(fhicl::ParameterSet const &p)
   fTriggerTree->Branch("mcmuon.enters_tpc", &fMCMuonEntersTPC);
   fTriggerTree->Branch("hasTag", &fMCMuonHasFlash);
   fTriggerTree->Branch("recomuon.time", &fMuonFlashTime);
+  fTriggerTree->Branch("recomuon.mult", &fMuonMult);
   fTriggerTree->Branch("recomuon.rawamp", &fMuonRawAmp);
   fTriggerTree->Branch("recomichel.rawamp", &fMichelRawAmp);
   fTriggerTree->Branch("recomuon.sadcwamp", &fMuonSADCWAmp);
   fTriggerTree->Branch("recomichel.sadcwamp", &fMichelSADCWAmp);
+  fTriggerTree->Branch("mcmuon.rawamp", &fMCMuonRawAmp);
+  fTriggerTree->Branch("mcmuon.sadcwamp", &fMCMuonSADCWAmp);
+  fTriggerTree->Branch("mcmichel.rawamp", &fMCMichelRawAmp);
+  fTriggerTree->Branch("mcmichel.rawamp", &fMCMichelSADCWAmp);
   fTriggerTree->Branch("recomichel.time", &fMichelFlashTime);
   fTriggerTree->Branch("crt.g4id", &fTriggerG4ID);
   fTriggerTree->Branch("crt.pdg", &fTriggerPDG);
@@ -511,6 +523,7 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
         fMCMuonEntersTPC = false;
         fMCMuonHasFlash = false;
         fMuonFlashTime = -9999.;
+        fMuonMult = -1;
         fMichelFlashTime = -9999.;
         fTriggerG4ID = -1;
         fMuonRawAmp = -9999.;
@@ -677,6 +690,11 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
       fMichelTime = -9999.;
       fMichelID = false;
       fMCMuonTime = -9999.;
+      fMCMuonRawAmp = -9999.;
+      fMCMuonSADCWAmp = -9999.;
+      fMCMichelRawAmp = -9999.;
+      fMCMichelSADCWAmp = -9999.;
+
       for (auto &muon_tuple : muon_tuple_vect)
       {
         if (muon_tuple.G4ID == g4id)
@@ -697,6 +715,10 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
           fMCMuonStopping = muon_tuple.Stopping;
           fMCMuonEntersTPC = muon_tuple.EntersTPC;
           fMCMuonHasFlash = muon_tuple.HasFlash;
+          fMCMuonRawAmp = muon_tuple.RawAmp;
+          fMCMichelRawAmp = muon_tuple.MichelRawAmp;
+          fMCMuonSADCWAmp = muon_tuple.SADCWAmp;
+          fMCMichelSADCWAmp = muon_tuple.MichelSADCWAmp;
         }
       }
 
@@ -711,7 +733,7 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
       fMuonSADCWAmp = -9999.;
       fMichelRawAmp = -9999.;
       fMichelSADCWAmp = -9999.;
-
+      fMuonMult = -1;
       for (auto &crthit : crtHits)
       {
         if (crthit.G4ID == (unsigned)g4id)
@@ -734,6 +756,7 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
                 fMichelRawAmp = micheltag.MichelRawAmp;
                 fMuonSADCWAmp = micheltag.MuonSADCWAmp;
                 fMichelSADCWAmp = micheltag.MichelSADCWAmp;
+                fMuonMult = micheltag.MuonMult;
               }
             }
           }
@@ -1346,8 +1369,11 @@ std::vector<std::pair<float, float>> sbnd::MichelTaggerProducer::findOpMuons(
   std::vector<float> cumulativeWaveform(waveformSize, 0);
   nSamples = waveformSize;
 
-  // auto pmttriggerHandle = e.getValidHandle<std::vector<sbnd::comm::pmtTrigger>>(fPMTTriggerLabel);
-  // auto pmtTrigger = (*pmttriggerHandle)[0];
+  auto pmttriggerHandle = e.getValidHandle<std::vector<sbnd::comm::pmtTrigger>>(fPMTTriggerLabel);
+  if (pmttriggerHandle->size() == 0)
+    mf::LogError("MichelTagger") << "Found no pmttriggers in producer: " << fPMTTriggerLabel << "\n";
+  auto pmtTrigger = (*pmttriggerHandle)[0];
+
   // Second loop: Process and accumulate the waveforms
   for (auto const &waveform : *waveforms)
   {
@@ -1369,6 +1395,36 @@ std::vector<std::pair<float, float>> sbnd::MichelTaggerProducer::findOpMuons(
   }
   auto smooth_wvf = CalcRunningAvg(cumulativeWaveform);
   auto rollingSum = applyRollingSum(cumulativeWaveform);
+
+  if (fUseMC)
+  {
+    for (auto &mcmuon : muon_tuple_vect)
+    {
+      if(!mcmuon.Stopping || mcmuon.MichelG4ID < 0) continue;
+      int muon_win = (int)(1000.*(mcmuon.Time - ((startTime - readoutDelay))) / (fCAENFreq * 4.));
+      auto muon_win_min = std::max(0, muon_win - 30);
+      auto muon_win_max = std::min((int)pmtTrigger.numPassed.size(), muon_win + 30);
+      mcmuon.Mult = *std::max_element(pmtTrigger.numPassed.begin() + muon_win_min, pmtTrigger.numPassed.begin() + muon_win_max);
+      int michel_win = (int)(1000.*(mcmuon.MichelTime - ((startTime - readoutDelay))) / (fCAENFreq * 4.));
+      auto michel_win_min = std::max(0, michel_win - 10);
+      auto michel_win_max = std::min((int)pmtTrigger.numPassed.size(), michel_win + 10);
+      mcmuon.MichelMult = *std::max_element(pmtTrigger.numPassed.begin() + michel_win_min, pmtTrigger.numPassed.begin() + michel_win_max);
+      std::cout << "Found mults \n" << mcmuon.Mult << "  " << mcmuon.MichelMult << "\n";
+
+      muon_win = (int)(1000.*((mcmuon.Time + readoutDelay)-startTime) / fCAENFreq);
+      muon_win_min = std::max(muon_win - 20, 0);
+      muon_win_max = std::min(muon_win + 20, (int)cumulativeWaveform.size() -1);
+      mcmuon.RawAmp = *std::max_element(cumulativeWaveform.begin() + muon_win_min, cumulativeWaveform.begin() + muon_win_max);
+      mcmuon.SADCWAmp = *std::max_element(rollingSum.begin() + muon_win_min, rollingSum.begin() + muon_win_max);
+      michel_win = (int)(1000.*((mcmuon.MichelTime + readoutDelay)-startTime) / fCAENFreq);
+      michel_win_min = std::max(michel_win - 20, 0);
+      michel_win_max = std::min(michel_win + 20, (int)cumulativeWaveform.size()-1);
+      mcmuon.MichelRawAmp = *std::max_element(cumulativeWaveform.begin() + michel_win_min, cumulativeWaveform.begin() + michel_win_max);
+      mcmuon.MichelSADCWAmp = *std::max_element(rollingSum.begin() + michel_win_min, rollingSum.begin() + michel_win_max);
+      std::cout << "Found MC Peaks \n" << mcmuon.RawAmp << "   " << mcmuon.SADCWAmp << "\n" << mcmuon.MichelRawAmp << "   " << mcmuon.MichelSADCWAmp << "\n";
+    }
+  } // Find MC muon, michel sadcw/raw amps
+
   std::vector<std::pair<size_t, float>> peakMap;
   findPeaks(rollingSum, smooth_wvf, peakMap);
   mf::LogInfo("MichelTag") << "Found " << peakMap.size() << " peaks\n";
@@ -1378,22 +1434,25 @@ std::vector<std::pair<float, float>> sbnd::MichelTaggerProducer::findOpMuons(
   std::vector<std::pair<float, float>> peakPairTimes;
   for (auto peakpair : peakPairs)
   {
-    // auto mult_win = (int)(peakpair.first / 4.);
-    // auto mult_win_min = std::max(0, mult_win - 30);
-    // auto mult_win_max = std::min((int)pmtTrigger.numPassed.size(), mult_win + 30);
-    // auto muon_mult = *max_element(pmtTrigger.numPassed.begin() + mult_win_min, pmtTrigger.numPassed.begin() + mult_win_max);
+    auto mult_win = (int)(peakpair.first / 4.);
+    auto mult_win_min = std::max(0, mult_win - 30);
+    auto mult_win_max = std::min((int)pmtTrigger.numPassed.size(), mult_win + 30);
+    auto muon_mult = *max_element(pmtTrigger.numPassed.begin() + mult_win_min, pmtTrigger.numPassed.begin() + mult_win_max);
+    std::cout << "Found reco mult: " << muon_mult << "\n";
     // if (muon_mult < fMinPMTMultiplicity)
     //   continue;
     float muontime = (float)peakpair.first / 500. + startTime;
     float micheltime = (float)peakpair.second / 500. + startTime;
     peakPairTimes.push_back(std::make_pair(muontime, micheltime));
     MichelTag micheltag_trigger;
+
     micheltag_trigger.MuonTime = muontime;
     micheltag_trigger.MichelTime = micheltime;
     micheltag_trigger.MuonRawAmp = smooth_wvf[peakpair.first];
     micheltag_trigger.MichelRawAmp = smooth_wvf[peakpair.second];
     micheltag_trigger.MuonSADCWAmp = rollingSum[peakpair.first];
     micheltag_trigger.MichelSADCWAmp = rollingSum[peakpair.second];
+    micheltag_trigger.MuonMult = muon_mult;
     // micheltag_trigger.MuonMult = muon_mult;
     for (auto &crthit : crtHits)
     {
