@@ -44,6 +44,7 @@ set(      MODULE_LIBRARIES larcorealg::Geometry
 
 cet_build_plugin(MichelTaggerProducer art::Module SOURCE MichelTaggerProducer_module.cc LIBRARIES ${MODULE_LIBRARIES} )
 cet_build_plugin(StoppingMuonFilter art::Module SOURCE StoppingMuonG4Filter_module.cc LIBRARIES ${MODULE_LIBRARIES} )
+cet_build_plugin(MichelVisMap art::Module SOURCE MichelVisMap_module.cc LIBRARIES ${MODULE_LIBRARIES})
 # install_headers()
 install_fhicl()
 install_source()

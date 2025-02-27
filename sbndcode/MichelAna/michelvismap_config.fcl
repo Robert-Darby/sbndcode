@@ -1,0 +1,11 @@
+BEGIN_PROLOG
+
+michelvismap:
+  module_type: "MichelVisMap"
+MCTruthLabel: 
+SEDLabel:
+SEDOutLabel:
+
+UseMC: true
+
+END_PROLOG
