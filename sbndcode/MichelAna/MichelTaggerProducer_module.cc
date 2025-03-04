@@ -74,7 +74,7 @@ public:
     long MichelDepPE;
     // float MichelTime, MichelEnergy;
     float FlashTime, MichelFlashTime;
-    bool HasFlash, Stopping, EntersTPC;
+    bool HasFlash, Stopping, EntersTPC, HasWvf;
   };
   struct CRTHit
   {
@@ -194,6 +194,7 @@ private:
   int fMCMuonMult;
   float fMCMichelSADCWAmp, fMCMichelRawAmp;
   bool fTriggerHasFlash;
+  bool fMCMuonHasWvf;
   std::vector<float> fMuonMultCoat, fMichelMultCoat, fMuonMultUncoat, fMichelMultUncoat;
 
   int findChannelPair(int opChannel);
@@ -314,6 +315,7 @@ sbnd::MichelTaggerProducer::MichelTaggerProducer(fhicl::ParameterSet const &p)
   fTriggerTree->Branch("mcmichel.dep_pe", &fMichelDepPE);
   fTriggerTree->Branch("mcmuon.is_stopping", &fMCMuonStopping);
   fTriggerTree->Branch("mcmuon.enters_tpc", &fMCMuonEntersTPC);
+  fTriggerTree->Branch("mcmuon.has_wvf", &fMCMuonHasWvf);
   fTriggerTree->Branch("hasTag", &fMCMuonHasFlash);
   fTriggerTree->Branch("recomuon.time", &fMuonFlashTime);
   fTriggerTree->Branch("recomuon.mult", &fMuonMult);
@@ -389,22 +391,18 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
   }
   if (fVerbose)
   {
-    std::cout << "OpMuons: \n";
+    mf::LogInfo("MichelTag") << "OpMuons: \n";
     for (auto muonmichel : opMuons)
     {
-      std::cout << "   " << muonmichel.first << "   " << muonmichel.second << "\n";
+      mf::LogInfo("MichelTag") << "   " << muonmichel.first << "   " << muonmichel.second << "\n";
     }
   }
   if (fVerbose)
   {
-    std::cout << "MC Muons\n";
+    mf::LogInfo("MichelTag") << "MC Muons\n";
     for (auto &muon : muon_tuple_vect)
     {
-      std::cout << "    " << muon.G4ID << "   " << muon.Time << "   " << muon.MichelTime << "   " << muon.MichelDepPE;
-      if (muon.HasFlash)
-        std::cout << "    TRIGGERED \n";
-      else
-        std::cout << "\n";
+      mf::LogInfo("MichelTag") << "    " << muon.G4ID << "   " << muon.Time << "   " << muon.MichelTime << "   " << muon.MichelDepPE;
     }
   }
 
@@ -521,6 +519,7 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
         fMCMuonStartZ = std::numeric_limits<float>::max();
         fMCMuonStopping = false;
         fMCMuonEntersTPC = false;
+        fMCMuonHasWvf = false;
         fMCMuonHasFlash = false;
         fMuonFlashTime = -9999.;
         fMuonMult = -1;
@@ -552,6 +551,7 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
 
                 fMCMuonStopping = mcmuon.Stopping;
                 fMCMuonEntersTPC = mcmuon.EntersTPC;
+                fMCMuonHasWvf = mcmuon.HasWvf;
                 fMCMuonHasFlash = mcmuon.HasFlash;
                 fMuonFlashTime = mcmuon.FlashTime;
                 fMichelFlashTime = mcmuon.MichelFlashTime;
@@ -652,10 +652,10 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
 
       if (fVerbose)
       {
-        std::cout << "\nFound " << fMuonMultCoat.size() << " coated muon peaks for " << g4id << "\n";
-        std::cout << "Found " << fMichelMultCoat.size() << " coated michel peaks for " << g4id << "\n";
-        std::cout << "Found " << fMuonMultUncoat.size() << " uncoated muon peaks for " << g4id << "\n";
-        std::cout << "Found " << fMichelMultUncoat.size() << " uncoated michel peaks for " << g4id << "\n";
+        mf::LogInfo("MichelTag") << "\nFound " << fMuonMultCoat.size() << " coated muon peaks for " << g4id << "\n"
+                                 << "Found " << fMichelMultCoat.size() << " coated michel peaks for " << g4id << "\n"
+                                 << "Found " << fMuonMultUncoat.size() << " uncoated muon peaks for " << g4id << "\n"
+                                 << "Found " << fMichelMultUncoat.size() << " uncoated michel peaks for " << g4id << "\n";
       }
 
       std::sort(fMuonMultCoat.begin(), fMuonMultCoat.end());
@@ -952,6 +952,7 @@ void sbnd::MichelTaggerProducer::findMCMuons(const art::Event &e)
     mcmuon.HasFlash = false;
     mcmuon.FlashTime = -9999.;
     mcmuon.MichelFlashTime = -9999.;
+    mcmuon.HasWvf = false;
     muon_tuple_vect.push_back(mcmuon);
   }
   std::sort(muon_tuple_vect.begin(), muon_tuple_vect.end(),
@@ -1147,7 +1148,6 @@ void sbnd::MichelTaggerProducer::findPeakPairs(
     float michel_peak2 = -std::numeric_limits<float>::max();
     size_t mu_peak_idx = -1;
     size_t michel_peak_idx = -1;
-    size_t mu_peak2_idx = -1;
     size_t michel_peak2_idx = -1;
     for (unsigned i_peak = 0; i_peak < peakIndices.size(); i_peak++)
     {
@@ -1164,16 +1164,12 @@ void sbnd::MichelTaggerProducer::findPeakPairs(
         if (peakIndices[i_peak].second > mu_peak)
         {
           mu_peak2 = mu_peak;
-          mu_peak2_idx = mu_peak_idx;
-          if (false)
-            std::cout << mu_peak2_idx << "\n";
           mu_peak = peakIndices[i_peak].second;
           mu_peak_idx = peakIndices[i_peak].first;
         }
         else
         {
           mu_peak2 = peakIndices[i_peak].second;
-          mu_peak2_idx = peakIndices[i_peak].first;
         } // If one of the two biggest peaks in muon search window
       }
       // If new tallest peak in michel window
@@ -1342,7 +1338,7 @@ std::vector<std::pair<float, float>> sbnd::MichelTaggerProducer::findOpMuons(
   }
 
   if (fVerbose)
-    std::cout << "StartTime: " << startTime << "    End Time: " << endTime << "\n";
+    mf::LogInfo("MichelTag") << "StartTime: " << startTime << "    End Time: " << endTime << "\n";
   wvfStartTime = startTime;
   wvfEndTime = endTime;
   wvfCRTHits.clear();
@@ -1401,15 +1397,16 @@ std::vector<std::pair<float, float>> sbnd::MichelTaggerProducer::findOpMuons(
     for (auto &mcmuon : muon_tuple_vect)
     {
       if(!mcmuon.Stopping || mcmuon.MichelG4ID < 0) continue;
+      if(mcmuon.Time < startTime || mcmuon.Time > endTime) continue;
+      mcmuon.HasWvf = true;
       int muon_win = (int)(1000.*(mcmuon.Time - ((startTime - readoutDelay))) / (fCAENFreq * 4.));
       auto muon_win_min = std::max(0, muon_win - 30);
-      auto muon_win_max = std::min((int)pmtTrigger.numPassed.size(), muon_win + 30);
+      auto muon_win_max = std::min((int)pmtTrigger.numPassed.size() -1, muon_win + 30);
       mcmuon.Mult = *std::max_element(pmtTrigger.numPassed.begin() + muon_win_min, pmtTrigger.numPassed.begin() + muon_win_max);
       int michel_win = (int)(1000.*(mcmuon.MichelTime - ((startTime - readoutDelay))) / (fCAENFreq * 4.));
       auto michel_win_min = std::max(0, michel_win - 10);
-      auto michel_win_max = std::min((int)pmtTrigger.numPassed.size(), michel_win + 10);
+      auto michel_win_max = std::min((int)pmtTrigger.numPassed.size()-1, michel_win + 10);
       mcmuon.MichelMult = *std::max_element(pmtTrigger.numPassed.begin() + michel_win_min, pmtTrigger.numPassed.begin() + michel_win_max);
-      std::cout << "Found mults \n" << mcmuon.Mult << "  " << mcmuon.MichelMult << "\n";
 
       muon_win = (int)(1000.*((mcmuon.Time + readoutDelay)-startTime) / fCAENFreq);
       muon_win_min = std::max(muon_win - 20, 0);
@@ -1421,7 +1418,6 @@ std::vector<std::pair<float, float>> sbnd::MichelTaggerProducer::findOpMuons(
       michel_win_max = std::min(michel_win + 20, (int)cumulativeWaveform.size()-1);
       mcmuon.MichelRawAmp = *std::max_element(cumulativeWaveform.begin() + michel_win_min, cumulativeWaveform.begin() + michel_win_max);
       mcmuon.MichelSADCWAmp = *std::max_element(rollingSum.begin() + michel_win_min, rollingSum.begin() + michel_win_max);
-      std::cout << "Found MC Peaks \n" << mcmuon.RawAmp << "   " << mcmuon.SADCWAmp << "\n" << mcmuon.MichelRawAmp << "   " << mcmuon.MichelSADCWAmp << "\n";
     }
   } // Find MC muon, michel sadcw/raw amps
 
@@ -1436,11 +1432,8 @@ std::vector<std::pair<float, float>> sbnd::MichelTaggerProducer::findOpMuons(
   {
     auto mult_win = (int)(peakpair.first / 4.);
     auto mult_win_min = std::max(0, mult_win - 30);
-    auto mult_win_max = std::min((int)pmtTrigger.numPassed.size(), mult_win + 30);
+    auto mult_win_max = std::min((int)pmtTrigger.numPassed.size() - 1, mult_win + 30);
     auto muon_mult = *max_element(pmtTrigger.numPassed.begin() + mult_win_min, pmtTrigger.numPassed.begin() + mult_win_max);
-    std::cout << "Found reco mult: " << muon_mult << "\n";
-    // if (muon_mult < fMinPMTMultiplicity)
-    //   continue;
     float muontime = (float)peakpair.first / 500. + startTime;
     float micheltime = (float)peakpair.second / 500. + startTime;
     peakPairTimes.push_back(std::make_pair(muontime, micheltime));

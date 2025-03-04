@@ -14,7 +14,7 @@ set(      MODULE_LIBRARIES larcorealg::Geometry
                            larpandora::LArPandoraInterface
                            sbndcode_GeoWrappers
                            sbndcode_CRTUtils
-                           sbndcode_CRT
+                           sbndcode_CRTData
                            sbnobj::Common_CRT
                            sbnobj_SBND_Trigger
                            nusimdata::SimulationBase

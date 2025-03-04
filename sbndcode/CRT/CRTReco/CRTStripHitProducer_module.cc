@@ -222,11 +222,7 @@ std::vector<sbnd::crt::CRTStripHit> sbnd::crt::CRTStripHitProducer::CreateStripH
 
       if(unix_diff < -1 || unix_diff > 1)
         {
-<<<<<<< HEAD
-          throw std::runtime_error(Form("Unix timestamps differ by more than 1 (%li)", unix_diff));
-=======
           throw std::runtime_error("Unix timestamps differ by more than 1" + unix_diff);
->>>>>>> develop
         }
 
       if(unix_diff == 1)
@@ -311,22 +307,14 @@ bool sbnd::crt::CRTStripHitProducer::SPECTDCReference(art::Event& e, const uint6
   std::vector<art::Ptr<sbnd::timing::DAQTimestamp>> TDCVec;
   art::fill_ptr_vector(TDCVec, TDCHandle);
 
-<<<<<<< HEAD
-  int64_t min_diff     = std::numeric_limits<int64_t>::max();
-=======
   uint64_t min_diff    = std::numeric_limits<int64_t>::max();
->>>>>>> develop
   uint64_t min_diff_ts = 0;
 
   for(auto ts : TDCVec)
     {
       if(ts->Channel() == fSPECTDCETrigChannel)
         {
-<<<<<<< HEAD
-          int64_t diff = raw_ts > ts->Timestamp() ? raw_ts - ts->Timestamp() : ts->Timestamp() - raw_ts;
-=======
           uint64_t diff = raw_ts > ts->Timestamp() ? raw_ts - ts->Timestamp() : ts->Timestamp() - raw_ts;
->>>>>>> develop
 
           if(diff < min_diff)
             {
@@ -358,11 +346,7 @@ bool sbnd::crt::CRTStripHitProducer::PTBHLTReference(art::Event& e, const uint64
   std::vector<art::Ptr<raw::ptb::sbndptb>> PTBVec;
   art::fill_ptr_vector(PTBVec, PTBHandle);
 
-<<<<<<< HEAD
-  int64_t min_diff     = std::numeric_limits<int64_t>::max();
-=======
   uint64_t min_diff    = std::numeric_limits<int64_t>::max();
->>>>>>> develop
   uint64_t min_diff_ts = 0;
 
   for(auto ptb : PTBVec)
@@ -370,21 +354,13 @@ bool sbnd::crt::CRTStripHitProducer::PTBHLTReference(art::Event& e, const uint64
       for(auto hlt : ptb->GetHLTriggers())
         {
           uint64_t hlt_timestamp          = (hlt.timestamp * 20);
-<<<<<<< HEAD
-          std::bitset<32> hlt_word_bitset = TriggerWordBitset(hlt.trigger_word);
-=======
           std::bitset<32> hlt_word_bitset = std::bitset<32>(hlt.trigger_word);
->>>>>>> develop
 
           for(uint32_t allowed_hlt : fAllowedPTBHLTs)
             {
               if(hlt_word_bitset[allowed_hlt])
                 {
-<<<<<<< HEAD
-                  int64_t diff = raw_ts > hlt_timestamp ? raw_ts - hlt_timestamp : hlt_timestamp - raw_ts;
-=======
                   uint64_t diff = raw_ts > hlt_timestamp ? raw_ts - hlt_timestamp : hlt_timestamp - raw_ts;
->>>>>>> develop
 
                   if(diff < min_diff)
                     {
@@ -406,18 +382,4 @@ bool sbnd::crt::CRTStripHitProducer::PTBHLTReference(art::Event& e, const uint64
   return found;
 }
 
-<<<<<<< HEAD
-std::bitset<32> sbnd::crt::CRTStripHitProducer::TriggerWordBitset(uint32_t trig_word)
-{
-  uint32_t trig_word_dec;
-  std::stringstream ss;
-
-  ss << std::hex << trig_word << std::dec;
-  ss >> trig_word_dec;
-
-  return std::bitset<32>(trig_word_dec);
-}
-
-=======
->>>>>>> develop
 DEFINE_ART_MODULE(sbnd::crt::CRTStripHitProducer)
