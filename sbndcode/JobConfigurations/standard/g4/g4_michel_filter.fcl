@@ -21,3 +21,5 @@ physics.simulate: [ rns
 
 physics.filters.michelfilter: @local::stoppingmug4filter
 outputs.out1.SelectEvents: [ "simulate" ]
+
+physics.producers.pdfastsim.UseLitePhotons: false

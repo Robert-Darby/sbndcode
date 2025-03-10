@@ -1,11 +1,25 @@
+#include "sbnd_flashfinder_deco.fcl"
+
 BEGIN_PROLOG
 
 michelvismap:
+{
   module_type: "MichelVisMap"
-MCTruthLabel: 
-SEDLabel:
-SEDOutLabel:
+  MCTruthLabel: "largeant"
+  SEDLabel: "ionandscint"
+  SEDOutLabel: "ionandscintout"
+  SimPhotonLabel: "pdfastsim"
 
-UseMC: true
+  OpHitLabels: ["ophitpmt", "ophitxarapuca"]
+  CoincidenceWindow: 0.1 # us
+  fPMTDelay: @local::SBNDDecoSimpleFlashTPC1.ReadoutDelay
+  fXARAPuCADelay: @local::SBNDDecoSimpleFlashTPC1Arapuca.ReadoutDelay
+
+  PDMapAlg: {
+    tool_type: sbndPDMapAlg
+  }
+
+  UseMC: true
+}
 
 END_PROLOG
