@@ -26,7 +26,7 @@ MichelTaggerProducer:
   FinderPolarity: 1.  # -1 or 1. -1 flips the waveform.
   FindMuonThreshold: 1000.  # Min ADC for candidate muon peak
   FindMichelPeak: 100.      # Min Michel peak height as fraction of muon peak
-  MuonMichelMaxRatio: 0.7
+  MuonMichelMaxRatio: 0.01
   CRTLabel: "crtsim"
   CRTGeoParams: @local::crtgeoalg_sbnd
   CRTOffset: 1700000.
@@ -34,9 +34,10 @@ MichelTaggerProducer:
   CRTCoincidence: 300.
   RunningSumSampleWidth: 10
 
-  InputLabels: ["opdecopmt"]
-  InputOpTypes: ["pmt_coated", "pmt_uncoated"]
-  InputPolarity: [1., 1.]
+  ProduceWaveforms: true
+  InputLabel: "opdecopmt" # opdecoxarapuca
+  InputOpTypes: ["pmt_coated", "pmt_uncoated", "xarapuca_vuv", "xarapuca_vis"]
+  InputPolarity: [1., 1., 1., 1.]
   MuonThresholds: [125., 75., 50., 50.]
   MichelThresholds: [ 125., 75., 50., 50.]  # Min ADC for a Michel peak for each detector type
   PeakCoincWindow: 80. # [ns] Search window relative to each candidate muon/michel peak

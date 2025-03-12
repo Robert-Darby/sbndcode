@@ -110,7 +110,8 @@ private:
   const int fRunningAvgSampleWidth;
 
   // For finding peaks in individual waveforms
-  const std::vector<art::InputTag> fInputLabels;
+  const bool fProduceWaveforms;
+  const art::InputTag fInputLabel;
   const std::vector<std::string> fInputOpTypes;
   const std::vector<float> fInputPolarity;
   const std::vector<float> fMuonThresholds, fMichelThresholds;
@@ -244,7 +245,8 @@ sbnd::MichelTaggerProducer::MichelTaggerProducer(fhicl::ParameterSet const &p)
       fRunningAvgSampleWidth(p.get<int>("RunningSumSampleWidth", 20)),
 
       // For finding peaks in individual waveforms
-      fInputLabels(p.get<std::vector<art::InputTag>>("InputLabels")),
+      fProduceWaveforms(p.get<bool>("ProduceWaveforms", false)),
+      fInputLabel(p.get<art::InputTag>("InputLabel", "opdecopmt")),
       fInputOpTypes(p.get<std::vector<std::string>>("InputOpTypes")),
       fInputPolarity(p.get<std::vector<float>>("InputPolarity")),
       fMuonThresholds(p.get<std::vector<float>>("MuonThresholds")),
@@ -274,6 +276,7 @@ sbnd::MichelTaggerProducer::MichelTaggerProducer(fhicl::ParameterSet const &p)
       fVerbose(p.get<bool>("Verbose", false))
 {
   produces<std::vector<sbnd::MichelTag>>();
+  produces<std::vector<raw::OpDetWaveform>>();
   produces<art::Assns<recob::OpFlash, sbnd::MichelTag>>();
 
   art::ServiceHandle<art::TFileService> tfs;
@@ -342,6 +345,8 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
 {
   std::unique_ptr<std::vector<sbnd::MichelTag>>
       micheltag_v(new std::vector<sbnd::MichelTag>);
+  std::unique_ptr<std::vector<raw::OpDetWaveform>>
+      michelwvfms_v(std::make_unique<std::vector<raw::OpDetWaveform>>());
   std::unique_ptr<art::Assns<recob::OpFlash, sbnd::MichelTag>>
       micheltag_opflash_assn_v(new art::Assns<recob::OpFlash, sbnd::MichelTag>);
 
@@ -406,14 +411,12 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
     }
   }
 
-  for (size_t label_idx = 0; label_idx < fInputLabels.size(); label_idx++)
+  if (fProduceWaveforms)
   {
-    auto label = fInputLabels[label_idx];
-    auto polarity = fInputPolarity[label_idx];
-    auto handle = e.getHandle<std::vector<raw::OpDetWaveform>>(label);
+    auto handle = e.getHandle<std::vector<raw::OpDetWaveform>>(fInputLabel);
 
     if (!handle)
-      continue;
+      mf::LogError("MichelTag") << "Invalid handle name: " << fInputLabel << "\n";
 
     for (const auto &waveform : *handle)
     {
@@ -424,6 +427,7 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
         continue;
       auto conversionFactor = (fPDMap.electronicsType(fChannel) == "daphne") ? fDaphneFreq : fCAENFreq;
       unsigned opTypeIdx = std::distance(fPDs.begin(), std::find(fPDs.begin(), fPDs.end(), opType));
+      auto polarity = fInputPolarity[opTypeIdx];
       muonThreshold = fMuonThresholds.at(opTypeIdx);
       michelThreshold = fMichelThresholds.at(opTypeIdx);
 
@@ -486,6 +490,27 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
         fMichelPeakTime = (fHasMichelPeak) ? ((float)michelPeakIndex * conversionFactor / 1000.) + (float)wvfStartTime : -9999.;
         fMuonPeakAmp = correctedWaveform[muonPeakIndex];
         fMichelPeakAmp = correctedWaveform[michelPeakIndex];
+
+        if (fHasMichelPeak)
+        {
+          unsigned save_start_bin, save_end_bin;
+          float save_start_time;
+          if (fMichelPeakTime - fMuonPeakTime > 0.1)
+          {
+            save_start_bin = michelPeakIndex - (unsigned)(100 / conversionFactor);
+          }
+          else
+          {
+            auto min_part = std::min_element(correctedWaveform.begin() + muonPeakIndex, correctedWaveform.begin() + michelPeakIndex);
+            save_start_bin = std::distance(correctedWaveform.begin(), min_part);
+          }
+          save_end_bin = (fMichelPeakTime + 2. > wvfEndTime) ? nSamples - 1 : michelPeakIndex + (unsigned)(2000 / conversionFactor);
+          save_start_time = ((float)save_start_bin * conversionFactor / 1000.) + (float)wvfStartTime;
+          std::vector<short unsigned> save_wvf;
+          for (unsigned i_adc = save_start_bin; i_adc < save_end_bin; i_adc++)
+            save_wvf.push_back((short unsigned)correctedWaveform[i_adc]);
+          michelwvfms_v->push_back(raw::OpDetWaveform(save_start_time, fChannel, save_wvf));
+        }
 
         fRawWaveform.clear();
         if (fHasMichelPeak && fMichelPeakTime - fMuonPeakTime > 2.)
@@ -800,6 +825,8 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
   }
 
   e.put(std::move(micheltag_v));
+  mf::LogInfo("MichelTag") << "Saving " << michelwvfms_v->size() << " Michel waveforms";
+  e.put(std::move(michelwvfms_v));
   e.put(std::move(micheltag_opflash_assn_v));
 }
 
@@ -1198,7 +1225,15 @@ void sbnd::MichelTaggerProducer::findPeakPairs(
     }
     if (mu_peak > muonThreshold &&
         ((fRequireMichel && michel_peak > michelThreshold) || !fRequireMichel))
+    {
+      if (mu_peak_idx > michel_peak_idx && michel_peak > 0)
+      {
+        auto temp = mu_peak_idx;
+        mu_peak_idx = michel_peak_idx;
+        michel_peak_idx = temp;
+      }
       peakPairs.push_back(std::make_pair(mu_peak_idx, michel_peak_idx));
+    }
   } // Loop over candidate times
 } // findPeakPairs
 
@@ -1396,26 +1431,28 @@ std::vector<std::pair<float, float>> sbnd::MichelTaggerProducer::findOpMuons(
   {
     for (auto &mcmuon : muon_tuple_vect)
     {
-      if(!mcmuon.Stopping || mcmuon.MichelG4ID < 0) continue;
-      if(mcmuon.Time < startTime || mcmuon.Time > endTime) continue;
+      if (!mcmuon.Stopping || mcmuon.MichelG4ID < 0)
+        continue;
+      if (mcmuon.Time < startTime || mcmuon.Time > endTime)
+        continue;
       mcmuon.HasWvf = true;
-      int muon_win = (int)(1000.*(mcmuon.Time - ((startTime - readoutDelay))) / (fCAENFreq * 4.));
+      int muon_win = (int)(1000. * (mcmuon.Time - ((startTime - readoutDelay))) / (fCAENFreq * 4.));
       auto muon_win_min = std::max(0, muon_win - 30);
-      auto muon_win_max = std::min((int)pmtTrigger.numPassed.size() -1, muon_win + 30);
+      auto muon_win_max = std::min((int)pmtTrigger.numPassed.size() - 1, muon_win + 30);
       mcmuon.Mult = *std::max_element(pmtTrigger.numPassed.begin() + muon_win_min, pmtTrigger.numPassed.begin() + muon_win_max);
-      int michel_win = (int)(1000.*(mcmuon.MichelTime - ((startTime - readoutDelay))) / (fCAENFreq * 4.));
+      int michel_win = (int)(1000. * (mcmuon.MichelTime - ((startTime - readoutDelay))) / (fCAENFreq * 4.));
       auto michel_win_min = std::max(0, michel_win - 10);
-      auto michel_win_max = std::min((int)pmtTrigger.numPassed.size()-1, michel_win + 10);
+      auto michel_win_max = std::min((int)pmtTrigger.numPassed.size() - 1, michel_win + 10);
       mcmuon.MichelMult = *std::max_element(pmtTrigger.numPassed.begin() + michel_win_min, pmtTrigger.numPassed.begin() + michel_win_max);
 
-      muon_win = (int)(1000.*((mcmuon.Time + readoutDelay)-startTime) / fCAENFreq);
+      muon_win = (int)(1000. * ((mcmuon.Time + readoutDelay) - startTime) / fCAENFreq);
       muon_win_min = std::max(muon_win - 20, 0);
-      muon_win_max = std::min(muon_win + 20, (int)cumulativeWaveform.size() -1);
+      muon_win_max = std::min(muon_win + 20, (int)cumulativeWaveform.size() - 1);
       mcmuon.RawAmp = *std::max_element(cumulativeWaveform.begin() + muon_win_min, cumulativeWaveform.begin() + muon_win_max);
       mcmuon.SADCWAmp = *std::max_element(rollingSum.begin() + muon_win_min, rollingSum.begin() + muon_win_max);
-      michel_win = (int)(1000.*((mcmuon.MichelTime + readoutDelay)-startTime) / fCAENFreq);
+      michel_win = (int)(1000. * ((mcmuon.MichelTime + readoutDelay) - startTime) / fCAENFreq);
       michel_win_min = std::max(michel_win - 20, 0);
-      michel_win_max = std::min(michel_win + 20, (int)cumulativeWaveform.size()-1);
+      michel_win_max = std::min(michel_win + 20, (int)cumulativeWaveform.size() - 1);
       mcmuon.MichelRawAmp = *std::max_element(cumulativeWaveform.begin() + michel_win_min, cumulativeWaveform.begin() + michel_win_max);
       mcmuon.MichelSADCWAmp = *std::max_element(rollingSum.begin() + michel_win_min, rollingSum.begin() + michel_win_max);
     }
@@ -1441,8 +1478,8 @@ std::vector<std::pair<float, float>> sbnd::MichelTaggerProducer::findOpMuons(
 
     micheltag_trigger.MuonTime = muontime;
     micheltag_trigger.MichelTime = micheltime;
-    micheltag_trigger.MuonRawAmp = smooth_wvf[peakpair.first];
-    micheltag_trigger.MichelRawAmp = smooth_wvf[peakpair.second];
+    micheltag_trigger.MuonRawAmp = cumulativeWaveform[peakpair.first];
+    micheltag_trigger.MichelRawAmp = cumulativeWaveform[peakpair.second];
     micheltag_trigger.MuonSADCWAmp = rollingSum[peakpair.first];
     micheltag_trigger.MichelSADCWAmp = rollingSum[peakpair.second];
     micheltag_trigger.MuonMult = muon_mult;
