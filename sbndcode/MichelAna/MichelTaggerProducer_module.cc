@@ -18,6 +18,7 @@
 #include "canvas/Persistency/Common/FindManyP.h" // Find associations as pointers
 #include "canvas/Persistency/Common/FindOneP.h"
 #include "lardata/Utilities/AssociationUtil.h"
+#include "sbndcode/MichelRecoUtil/MichelRecoUtil.hh"
 
 #include "canvas/Persistency/Common/Assns.h"
 #include "sbndcode/Geometry/GeometryWrappers/CRTGeoAlg.h"
@@ -200,12 +201,7 @@ private:
 
   int findChannelPair(int opChannel);
   void findMCMuons(const art::Event &e);
-  std::vector<float> CalcRunningAvg(std::vector<float> &wvf);
-  // void GaussianSmoothing(std::vector<float> &Baseline);
-  std::vector<float> subtractBaseline(const std::vector<float> &waveform, const float conversionFactor);
-  std::vector<float> applyRollingSum(const std::vector<float> &waveform);
-  void findPeaks(const std::vector<float> &seazrchWaveform, const std::vector<float> &waveform, std::vector<std::pair<size_t, float>> &peakIndices);
-  void findPeakPairs(const std::vector<std::pair<size_t, float>> &peakIndices, const bool use_opMuons, std::vector<std::pair<size_t, size_t>> &peakPairs, int channel);
+    void findPeakPairs(const std::vector<std::pair<size_t, float>> &peakIndices, const bool use_opMuons, std::vector<std::pair<size_t, size_t>> &peakPairs, int channel);
   void findCRTTimes(const art::Event &e);
   std::vector<std::pair<float, float>> findOpMuons(art::Event &e, std::unique_ptr<std::vector<sbnd::MichelTag>> &micheltag_v, std::unique_ptr<art::Assns<recob::OpFlash, sbnd::MichelTag>> &micheltag_opflash_assn_v);
   void addPeakToMap(std::map<int, std::vector<std::pair<int, float>>> &multMap, int g4id, int opChannel, int pair_channel, float peakAmp, bool requirePositive);
@@ -437,10 +433,10 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
           rawWaveformData.begin(), rawWaveformData.end(), waveformData.begin(),
           [polarity](short adc)
           { return polarity * (float)adc; });
-      auto correctedWaveform = subtractBaseline(waveformData, conversionFactor);
+      auto correctedWaveform = MichelRecoUtil::subtractBaseline(waveformData, conversionFactor);
       // Apply rolling sum to the waveform
-      auto smooth_wvf = CalcRunningAvg(correctedWaveform);
-      auto rollingSumWaveform = applyRollingSum(correctedWaveform);
+      auto smooth_wvf = MichelRecoUtil::CalcRunningAvg(fRunningAvgSampleWidth, correctedWaveform);
+      auto rollingSumWaveform = MichelRecoUtil::applyRollingSum(correctedWaveform);
 
       nSamples = waveformData.size();
 
@@ -471,7 +467,7 @@ void sbnd::MichelTaggerProducer::produce(art::Event &e)
 
       // Find peaks
       std::vector<std::pair<size_t, float>> peakIndices;
-      findPeaks(rollingSumWaveform, correctedWaveform, peakIndices);
+      MichelRecoUtil::findPeaks(rollingSumWaveform, correctedWaveform, fFindMichelPeak, peakIndices);
 
       // Find pairs of peaks
       std::vector<std::pair<size_t, size_t>> peakPairs;
@@ -863,7 +859,8 @@ void sbnd::MichelTaggerProducer::findMCMuons(const art::Event &e)
   if (e.getByLabel(fSEDLabel, sedHandle)) // Make sure artHandle is from module
     art::fill_ptr_vector(sedVect, sedHandle);
 
-  art::Handle<std::vector<sim::SimEnergyDeposit>> sedoutHandle;
+  art::Handle<std::vector<sim::SimEnergyDeposit>>
+      sedoutHandle;
   std::vector<art::Ptr<sim::SimEnergyDeposit>> sedoutVect;
   if (e.getByLabel(fSEDOutLabel, sedoutHandle)) // Make sure artHandle is from module
     art::fill_ptr_vector(sedoutVect, sedoutHandle);
@@ -987,143 +984,9 @@ void sbnd::MichelTaggerProducer::findMCMuons(const art::Event &e)
             { return (muon2.Time > muon1.Time); });
 }
 
-std::vector<float> sbnd::MichelTaggerProducer::CalcRunningAvg(std::vector<float> &wvf)
-{
-  // int index =0;
-  double Median = 0.;
-  // Bury a nested loop in a thing Im not sure is any faster
-  std::vector<float> Baseline(wvf.size());
-  std::vector<float> smooth_wvf(wvf.size(), 0.);
-  for (int i = 0; i < int(wvf.size()) - fRunningAvgSampleWidth; i++)
-  {
-    int EndIndex = i + fRunningAvgSampleWidth;
-    double sum = 0;
-    for (int j = i; j < EndIndex; j++)
-    {
-      if (wvf[j] < Median - 40)
-        sum = sum + wvf[j]; // mask out pulses
-      else
-        sum = sum + Median;
-    }
-    Baseline[i] = sum / (EndIndex - i);
-  } // CalcAvgBaseline
-  // std::for_each(Baseline.begin(), Baseline.begin()+(wvf.size()-fRunningAvgSampleWidth), [wvf, &index, this](int& Val)
-  //           {
-  //           Val = std::accumulate(wvf.begin()+index, wvf.begin()+index+fRunningAvgSampleWidth, 0)/fRunningAvgSampleWidth;
-  //           index = index+1;
-  //           } );
-  for (int i = int(wvf.size()) - fRunningAvgSampleWidth; i < int(wvf.size()); i++)
-  {
-    int EndIndex = i + fRunningAvgSampleWidth;
-    if (EndIndex > int(wvf.size()))
-      EndIndex = int(wvf.size());
-    double sum = 0;
-    for (int j = i; j < EndIndex; j++)
-    {
-      if (wvf[j] < Median - 40)
-        sum = sum + wvf[j]; // mask out pulses
-      else
-        sum = sum + Median;
-    }
-    Baseline[i] = sum / (EndIndex - i);
-  }
-  for (unsigned i = 0; i < wvf.size(); i++)
-    smooth_wvf[i] -= Baseline[i];
-  // Baseline is all updated an can return
-  return smooth_wvf;
-}
-/*
-void sbnd::MichelTaggerProducer::GaussianSmoothing(std::vector<float> &Baseline)
-{
-  std::vector<int> Out(Baseline.size());
-  std::vector<int> X(fGuassianConvlSize * 2 + 1);
-  std::iota(X.begin(), X.end(), -fGuassianConvlSize);
-  std::vector<double> Weights(fGuassianConvlSize * 2 + 1);
-  double sum = 0;
-  for (int i = 0; i < int(Weights.size()); i++)
-  {
-    Weights[i] = TMath::Exp(-TMath::Power(double(X[i]), 2.0) / (2 * TMath::Power(double(fGaussianConvlWidth), 2.0)));
-    sum += Weights[i];
-  }
-  // Now do the convolution
-  for (int i = fGuassianConvlSize + 1; i < int(Baseline.size()) - (fGuassianConvlSize + 1); i++)
-  {
-    double PointSum = 0;
-    std::for_each(X.begin(), X.end(), [&PointSum, i, Weights, Baseline, this](int Index)
-                  { PointSum += Baseline[i + Index] * Weights[fGuassianConvlSize + Index]; });
-    Out[i] = PointSum;
-  }
-  // Handle edges properly
-  for (int i = 0; i < fGuassianConvlSize + 1; i++)
-  {
-    double PointSum = 0;
-    std::for_each(X.begin() + fGuassianConvlSize - i, X.end(), [&PointSum, i, Weights, Baseline, this](int Index)
-                  { PointSum += Baseline[i + Index] * Weights[fGuassianConvlSize + Index]; });
-    Out[i] = PointSum;
-  }
-  for (int i = int(Baseline.size()) - (fGuassianConvlSize + 1); i < int(Baseline.size()); i++)
-  {
-    double PointSum = 0;
-    std::for_each(X.begin(), X.begin() + fGuassianConvlSize - (i - int(Baseline.size())), [&PointSum, i, Weights, Baseline, this](int Index)
-                  { PointSum += Baseline[i + Index] * Weights[fGuassianConvlSize + Index]; });
-    Out[i] = PointSum;
-  }
-  // Finally copy out to baseline
-  for (int i = 0; i < int(Baseline.size()); i++)
-    Baseline[i] = Out[i] / sum;
-} // Gaussian Smoothin
-*/
-std::vector<float> sbnd::MichelTaggerProducer::subtractBaseline(const std::vector<float> &waveform, const float conversionFactor)
-{
-  // Calculate baseline (mean of the first 100 ns)
-  size_t baselineSampleCount = static_cast<size_t>(100 / conversionFactor);
-  float baseline = std::accumulate(waveform.begin(), waveform.begin() + baselineSampleCount, 0.0f) / baselineSampleCount;
+// Calculate baseline (mean of the first 100 ns)
 
-  // Subtract baseline from waveform
-  std::vector<float> correctedWaveform(waveform.size());
-  std::transform(waveform.begin(), waveform.end(), correctedWaveform.begin(),
-                 [baseline](float val)
-                 { return val - baseline; });
 
-  return correctedWaveform;
-}
-
-std::vector<float> sbnd::MichelTaggerProducer::applyRollingSum(const std::vector<float> &waveform)
-{
-  std::vector<float> rollingSum(waveform.size(), 0.);
-  for (size_t i = 1; i < waveform.size(); ++i)
-  {
-    if (waveform[i] > waveform[i - 1])
-    {
-      rollingSum[i] = rollingSum[i - 1] + (waveform[i] - waveform[i - 1]);
-    }
-    else
-    {
-      rollingSum[i] = 0.0;
-    }
-  }
-  return rollingSum;
-}
-
-void sbnd::MichelTaggerProducer::findPeaks(
-    const std::vector<float> &searchWaveform,
-    const std::vector<float> &waveform,
-    std::vector<std::pair<size_t, float>> &peakIndices)
-{
-  const size_t nSamples = waveform.size();
-
-  for (size_t i = 1; i < nSamples - 1; ++i)
-  {
-    if (searchWaveform[i] > michelThreshold && searchWaveform[i] > searchWaveform[i - 1] && searchWaveform[i] > searchWaveform[i + 1])
-    {
-      float peak = searchWaveform[i];
-      peakIndices.push_back(std::make_pair(i, peak));
-    }
-  }
-  std::sort(peakIndices.begin(), peakIndices.end(),
-            [](std::pair<size_t, float> peak1, std::pair<size_t, float> peak2)
-            { return peak2.first > peak1.first; });
-}
 
 void sbnd::MichelTaggerProducer::findPeakPairs(
     const std::vector<std::pair<size_t, float>> &peakIndices,
@@ -1414,7 +1277,7 @@ std::vector<std::pair<float, float>> sbnd::MichelTaggerProducer::findOpMuons(
                    [](short adc)
                    { return (float)adc; });
     unsigned int startBin = static_cast<unsigned int>((waveform.TimeStamp() - (startTime)) * 500);
-    auto wf_corrected = subtractBaseline(wf, 2.);
+    auto wf_corrected = MichelRecoUtil::subtractBaseline(wf, 2.);
 
     for (size_t i = 0; i < wf.size(); ++i)
     {
@@ -1424,8 +1287,8 @@ std::vector<std::pair<float, float>> sbnd::MichelTaggerProducer::findOpMuons(
       }
     }
   }
-  auto smooth_wvf = CalcRunningAvg(cumulativeWaveform);
-  auto rollingSum = applyRollingSum(cumulativeWaveform);
+  auto smooth_wvf = MichelRecoUtil::CalcRunningAvg(fRunningAvgSampleWidth, cumulativeWaveform);
+  auto rollingSum = MichelRecoUtil::applyRollingSum(cumulativeWaveform);
 
   if (fUseMC)
   {
@@ -1459,7 +1322,7 @@ std::vector<std::pair<float, float>> sbnd::MichelTaggerProducer::findOpMuons(
   } // Find MC muon, michel sadcw/raw amps
 
   std::vector<std::pair<size_t, float>> peakMap;
-  findPeaks(rollingSum, smooth_wvf, peakMap);
+  MichelRecoUtil::findPeaks(rollingSum, smooth_wvf, michelThreshold, peakMap);
   mf::LogInfo("MichelTag") << "Found " << peakMap.size() << " peaks\n";
   std::vector<std::pair<size_t, size_t>> peakPairs;
   findPeakPairs(peakMap, false, peakPairs);

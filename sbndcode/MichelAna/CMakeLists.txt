@@ -1,4 +1,3 @@
-
 set(      MODULE_LIBRARIES larcorealg::Geometry
                            larcore::Geometry_Geometry_service
                            larsim::Simulation lardataobj::Simulation
@@ -40,11 +39,13 @@ set(      MODULE_LIBRARIES larcorealg::Geometry
                            ROOT::XMLIO
                            ROOT::Gdml
                            sbndcode_RecoUtils
+                           sbndcode_MichelRecoUtil
                            sbndcode_OpDetSim)
 
 cet_build_plugin(MichelTaggerProducer art::Module SOURCE MichelTaggerProducer_module.cc LIBRARIES ${MODULE_LIBRARIES} )
 cet_build_plugin(StoppingMuonFilter art::Module SOURCE StoppingMuonG4Filter_module.cc LIBRARIES ${MODULE_LIBRARIES} )
 cet_build_plugin(MichelVisMap art::Module SOURCE MichelVisMap_module.cc LIBRARIES ${MODULE_LIBRARIES})
+cet_build_plugin(MichelWaveformProducer art::Module SOURCE MichelWaveformProducer_module.cc LIBRARIES ${MODULE_LIBRARIES})
 # install_headers()
 install_fhicl()
 install_source()
