@@ -4,10 +4,10 @@
 
 BEGIN_PROLOG
 
-MichelTaggerProducer:
+MichelWaveformProducerPMT:
 {
   # Constants. These shouldn't need to be changed
-  module_type: "MichelTaggerProducer"
+  module_type: "MichelWaveformProducer"
   Pair1: @local::pmtTriggerProducer.Pair1
   Pair2: @local::pmtTriggerProducer.Pair2
   Unpaired: @local::pmtTriggerProducer.Unpaired
@@ -36,6 +36,7 @@ MichelTaggerProducer:
 
   ProduceWaveforms: true
   InputLabel: "opdecopmt" # opdecoxarapuca
+  MichelTagLabel: "micheltagdeco"
   InputOpTypes: ["pmt_coated", "pmt_uncoated", "xarapuca_vuv", "xarapuca_vis"]
   InputPolarity: [1., 1., 1., 1.]
   MuonThresholds: [125., 75., 50., 50.]
@@ -59,10 +60,13 @@ MichelTaggerProducer:
   MinLifetime: 10. # ns Min mu lifetime, appllies to peak pairing and MC
   MaxLifetime: 10000.
   SaveHists: false
-  MakeTree: true
+  MakeTree: false
   SaveEvents: [1]
   BinWaveforms: false
   Verbose: false
 }
+
+MichelWaveformProducerXARAPUCA: @local::MichelWaveformProducerPMT
+MichelWaveformProducerXARAPUCA.InputLabel: "opdecopmt"
 
 END_PROLOG

@@ -153,3 +153,6 @@ physics.producers.fluxweight.weight_functions: @local::physics.producers.fluxwei
 # input art file.
 physics.producers.cafmaker.SystWeightLabels: []
 
+# Add Michel Tags
+physics.producers.cafmaker.MichelTagLabels: ["micheltagdeco", "micheltagraw"]
+

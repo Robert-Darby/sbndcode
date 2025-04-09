@@ -201,7 +201,7 @@ private:
 
   int findChannelPair(int opChannel);
   void findMCMuons(const art::Event &e);
-    void findPeakPairs(const std::vector<std::pair<size_t, float>> &peakIndices, const bool use_opMuons, std::vector<std::pair<size_t, size_t>> &peakPairs, int channel);
+  void findPeakPairs(const std::vector<std::pair<size_t, float>> &peakIndices, const bool use_opMuons, std::vector<std::pair<size_t, size_t>> &peakPairs, int channel);
   void findCRTTimes(const art::Event &e);
   std::vector<std::pair<float, float>> findOpMuons(art::Event &e, std::unique_ptr<std::vector<sbnd::MichelTag>> &micheltag_v, std::unique_ptr<art::Assns<recob::OpFlash, sbnd::MichelTag>> &micheltag_opflash_assn_v);
   void addPeakToMap(std::map<int, std::vector<std::pair<int, float>>> &multMap, int g4id, int opChannel, int pair_channel, float peakAmp, bool requirePositive);
@@ -901,7 +901,7 @@ void sbnd::MichelTaggerProducer::findMCMuons(const art::Event &e)
     float michel_y = std::numeric_limits<float>::max();
     float michel_z = std::numeric_limits<float>::max();
 
-    if (mcp->EndProcess() == "Decay")
+    if (mu_enterstpc)
     {
       for (auto &mcp2 : mctruthVect)
       {
@@ -915,7 +915,7 @@ void sbnd::MichelTaggerProducer::findMCMuons(const art::Event &e)
         michel_y = mcp2->Position().Y();
         michel_z = mcp2->Position().Z();
         michel_energy = mcp2->E() * 1000.;
-        if (mu_decayintpc)
+        if (michel_id >= 0)
         {
           auto sed_part = std::partition(sedVect.begin(), sedVect.end(),
                                          [michel_id](art::Ptr<sim::SimEnergyDeposit> &sed)
@@ -985,8 +985,6 @@ void sbnd::MichelTaggerProducer::findMCMuons(const art::Event &e)
 }
 
 // Calculate baseline (mean of the first 100 ns)
-
-
 
 void sbnd::MichelTaggerProducer::findPeakPairs(
     const std::vector<std::pair<size_t, float>> &peakIndices,
@@ -1356,7 +1354,15 @@ std::vector<std::pair<float, float>> sbnd::MichelTaggerProducer::findOpMuons(
         if (fUseMC)
         {
           micheltag_trigger.G4ID = crthit.G4ID;
+          micheltag_trigger.MuonG4ID = crthit.G4ID;
           micheltag_trigger.G4PDG = crthit.PDG;
+          for (const auto &mcmuon : muon_tuple_vect)
+          {
+            if ((unsigned)mcmuon.G4ID == crthit.G4ID)
+            {
+              micheltag_trigger.MichelG4ID = mcmuon.MichelG4ID;
+            }
+          }
         } // UseMC
       } // If crthit is time coincident with muon flash
     } // CRTHit loop

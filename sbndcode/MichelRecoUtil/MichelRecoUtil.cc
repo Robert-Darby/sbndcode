@@ -62,9 +62,9 @@ std::vector<float> MichelRecoUtil::CalcRunningAvg(const int fRunningAvgSampleWid
         Baseline[i] = sum / (EndIndex - i);
     }
     for (unsigned i = 0; i < wvf.size(); i++)
-        smooth_wvf[i] -= Baseline[i];
+        smooth_wvf[i] = wvf[i] + Baseline[i];
     // Baseline is all updated an can return
-    return smooth_wvf;
+    return Baseline;
 }
 
 std::vector<float> MichelRecoUtil::subtractBaseline(const std::vector<float> &waveform, const float conversionFactor)

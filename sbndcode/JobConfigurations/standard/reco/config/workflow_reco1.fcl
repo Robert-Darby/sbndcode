@@ -11,6 +11,8 @@
 #include "numberofhitsfilter_sbnd.fcl"
 #include "mctrutht0matching.fcl"
 #include "micheltagger_config.fcl"
+#include "michelwaveform_config.fcl"
+#include "michelvismap_config.fcl"
 
 BEGIN_PROLOG
 
@@ -52,6 +54,10 @@ sbnd_reco1_producers:{
     ### Michel Tagger
     micheltagraw: @local::MichelTaggerProducer
     micheltagdeco: @local::MichelTaggerProducer
+    michelwaveformpmt: @local::MichelWaveformProducerPMT
+    michelwaveformxarapuca: @local::MichelWaveformProducerXARAPUCA
+    michelophitpmt: @local::SBNDDecoOpHitFinderPMT
+    michelophitxarapuca: @local::SBNDDecoOpHitFinderXArapuca
 
     ### ML reco inputs
     cluster3d: @local::sbnd_cluster3d
@@ -72,6 +78,10 @@ sbnd_reco1_producer_sequence: [
   , crtstrips
   , micheltagraw
   , micheltagdeco
+  , michelwaveformpmt
+  , michelwaveformxarapuca
+  , michelophitpmt
+  , michelophitxarapuca
   , cluster3d
  ]
 
@@ -90,10 +100,13 @@ sbnd_reco1_analyzers: {
     supera: @local::sbnd_supera
     superampvmpr: @local::sbnd_supera_mpvmpr
     superadata: @local::sbnd_supera_data
+
+    michelvismap: @local::MichelVisMap
 }
 
 sbnd_reco1_analyzer_sequence: [
-    supera
+    supera,
+    michelvismap
 ]
 
 END_PROLOG

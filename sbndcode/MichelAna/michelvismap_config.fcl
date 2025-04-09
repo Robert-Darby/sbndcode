@@ -2,7 +2,7 @@
 
 BEGIN_PROLOG
 
-michelvismap:
+MichelVisMap:
 {
   module_type: "MichelVisMap"
   MCTruthLabel: "largeant"
@@ -10,7 +10,7 @@ michelvismap:
   SEDOutLabel: "ionandscintout"
   SimPhotonLabel: "pdfastsim"
 
-  OpHitLabels: ["ophitpmt", "ophitxarapuca"]
+  OpHitLabels: ["ophitpmt", "ophitxarapuca", "michelophitpmt", "michelophitxarapuca"]
   CoincidenceWindow: 0.1 # us
   fPMTDelay: @local::SBNDDecoSimpleFlashTPC1.ReadoutDelay
   fXARAPuCADelay: @local::SBNDDecoSimpleFlashTPC1Arapuca.ReadoutDelay

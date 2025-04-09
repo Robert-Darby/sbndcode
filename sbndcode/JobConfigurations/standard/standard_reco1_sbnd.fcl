@@ -36,6 +36,8 @@ physics.producers.micheltagraw.FinderInputLabel: "opdaq"
 physics.producers.micheltagraw.FinderPolarity: -1.
 physics.producers.micheltagraw.InputLabels: ["opdaq"]
 physics.producers.micheltagraw.InputPolarity: [-1., -1.]
+physics.producers.michelophitpmt.InputModule: "michelwaveformpmt"
+physics.producers.michelophitxarapuca.InputLabel: "michelwaveformxarapuca"
 
 #outputs table overrides
 outputs.out1.dataTier:       "reconstructed"

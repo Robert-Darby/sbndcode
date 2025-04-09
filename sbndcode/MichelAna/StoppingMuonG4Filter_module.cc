@@ -86,7 +86,7 @@ bool sbnd::StoppingMuonFilter::filter(art::Event& e)
       if (fMinX < endX && endX < fMaxX &&
           fMinY < endY && endY < fMaxY &&
           fMinZ < endZ && endZ < fMaxZ &&
-          particle.EndProcess()=="Decay") {
+        particle.EndProcess()=="Decay") {
         // If a muon satisfies the condition, accept the event
         return true;
       }
