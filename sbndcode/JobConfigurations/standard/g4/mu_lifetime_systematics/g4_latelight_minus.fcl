@@ -1,1 +1,3 @@
+#include "g4_michel_filter.fcl"
 
+services.LArPropertiesService.ScintSlowTimeConst: 910.

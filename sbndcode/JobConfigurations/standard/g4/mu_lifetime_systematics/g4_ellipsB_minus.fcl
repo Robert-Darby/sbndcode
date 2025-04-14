@@ -1,1 +1,2 @@
-
+#include "g4_michel_filter.fcl"
+serviecs.LArG4Parameters.EllipsModBoxB: 0.195

@@ -1,2 +1,2 @@
-#include "g4_sce_lite.fcl"
+#include "g4_michel_filter.fcl"
 serviecs.LArG4Parameters.EllipsModBoxA: 0.914

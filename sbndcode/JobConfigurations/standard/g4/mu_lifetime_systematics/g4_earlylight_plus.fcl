@@ -1,1 +1,2 @@
-
+#include "g4_michel_filter.fcl"
+services.LArPropertiesService.ScintFastTimeConst: 7.
