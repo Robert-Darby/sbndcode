@@ -83,10 +83,11 @@ bool sbnd::StoppingMuonFilter::filter(art::Event& e)
       auto const& endZ = particle.EndZ();
 
       // Check if the stopping point is within the specified boundaries
+      mf::LogInfo("MuFilter") << particle.EndProcess() << std::endl;
       if (fMinX < endX && endX < fMaxX &&
           fMinY < endY && endY < fMaxY &&
           fMinZ < endZ && endZ < fMaxZ &&
-        particle.EndProcess()=="Decay") {
+        (particle.EndProcess()=="Decay" || particle.EndProcess()=="muMinusCaptureAtRest")) {
         // If a muon satisfies the condition, accept the event
         return true;
       }

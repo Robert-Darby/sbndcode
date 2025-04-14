@@ -258,6 +258,7 @@ void sbnd::MichelWaveformProducer::produce(art::Event &e)
         mtagsInWaveform.push_back(mtag);
       }
     }
+    mf::LogInfo("MichelWaveformProducer") << "Found " << mtagsInWaveform.size() << " Michel tags in waveform " << fChannel;
     if (mtagsInWaveform.empty())
       continue;
 
@@ -273,7 +274,7 @@ void sbnd::MichelWaveformProducer::produce(art::Event &e)
 
     if (peakPairs.empty())
       continue;
-
+    mf::LogInfo("MichelWaveformProducer") << "Found " << peakPairs.size() << " peak pairs in waveform " << fChannel;
     // Process each pair
     fMuonPeakTime = -9999.;
     fMichelPeakTime = -9999.;

@@ -907,7 +907,7 @@ void sbnd::MichelTaggerProducer::findMCMuons(const art::Event &e)
       {
         if (mcp2->Mother() != mcp->TrackId() ||
             (mcp2->Position() - mcp->EndPosition()).Mag() > 5. ||
-            abs(mcp2->PdgCode()) != 11)
+            abs(mcp2->PdgCode()) != 11 || mcp2->E() * 1000 < michel_energy)
           continue;
         michel_id = mcp2->TrackId();
         michel_time = mcp2->T() / 1000.;

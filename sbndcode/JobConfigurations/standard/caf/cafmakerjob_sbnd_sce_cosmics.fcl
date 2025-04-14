@@ -1,3 +1,4 @@
 #include "cafmakerjob_sbnd_sce.fcl"
 
 physics.producers.cafmaker.SaveGENIEEventRecord: false
+physics.producers.cafmaker.FillHits: true
