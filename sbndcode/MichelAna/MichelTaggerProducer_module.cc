@@ -27,6 +27,7 @@
 #include "sbndcode/OpDetSim/sbndPDMapAlg.hh"
 #include "nusimdata/SimulationBase/MCParticle.h"
 #include "sbnobj/SBND/CRT/FEBData.hh"
+#include "sbnobj/SBND/CRT/CRTStripHit.hh"
 #include "sbnobj/SBND/CRT/CRTEnums.hh"
 #include "lardataobj/Simulation/AuxDetHit.h"
 #include "lardataobj/RecoBase/OpFlash.h"
@@ -98,13 +99,14 @@ private:
   // For finding peaks in summed waveform
   const std::vector<std::string> fOpFlashLabels;
   const std::string fFinderInputLabel;
+  const std::string fFinderInstanceName;
   const std::vector<std::string> fFinderOpTypes;
   const std::string fPMTTriggerLabel;
   const int fMinPMTMultiplicity;
   const float fFinderPolarity;
   const float fFindMuonThreshold, fFindMichelPeak;
   const float fMuonMichelMaxRatio;
-  const std::string fCRTLabel;
+  const std::string fCRTLabel, fCRTStripHitLabel;
   const sbnd::crt::CRTGeoAlg fCRTGeo;
   const float fCRTOffset, fCRTClockSpeed;
   const float fCRTCoincidence;
@@ -113,6 +115,7 @@ private:
   // For finding peaks in individual waveforms
   const bool fProduceWaveforms;
   const art::InputTag fInputLabel;
+  const std::string fInstanceName;
   const std::vector<std::string> fInputOpTypes;
   const std::vector<float> fInputPolarity;
   const std::vector<float> fMuonThresholds, fMichelThresholds;
@@ -226,6 +229,7 @@ sbnd::MichelTaggerProducer::MichelTaggerProducer(fhicl::ParameterSet const &p)
       // For finding peaks in summed waveform
       fOpFlashLabels(p.get<std::vector<std::string>>("OpFlashLabels")),
       fFinderInputLabel(p.get<std::string>("FinderInputLabel")),
+      fFinderInstanceName(p.get<std::string>("FinderInstanceName")),
       fFinderOpTypes(p.get<std::vector<std::string>>("FinderOpTypes")),
       fPMTTriggerLabel(p.get<std::string>("PMTTriggerLabel")),
       fMinPMTMultiplicity(p.get<int>("MinPMTMultiplicity", 10)),
@@ -234,6 +238,7 @@ sbnd::MichelTaggerProducer::MichelTaggerProducer(fhicl::ParameterSet const &p)
       fFindMichelPeak(p.get<float>("FindMichelPeak", 1000.)),
       fMuonMichelMaxRatio(p.get<float>("MuonMichelMaxRatio", 1.)),
       fCRTLabel(p.get<std::string>("CRTLabel")),
+      fCRTStripHitLabel(p.get<std::string>("CRTStripHitLabel")),
       fCRTGeo(p.get<fhicl::ParameterSet>("CRTGeoParams")),
       fCRTOffset(p.get<float>("CRTOffset", 1700000.)),
       fCRTClockSpeed(p.get<float>("CRTClockspeed", 1.)),
@@ -243,6 +248,7 @@ sbnd::MichelTaggerProducer::MichelTaggerProducer(fhicl::ParameterSet const &p)
       // For finding peaks in individual waveforms
       fProduceWaveforms(p.get<bool>("ProduceWaveforms", false)),
       fInputLabel(p.get<art::InputTag>("InputLabel", "opdecopmt")),
+      fInstanceName(p.get<std::string>("InstanceName")),
       fInputOpTypes(p.get<std::vector<std::string>>("InputOpTypes")),
       fInputPolarity(p.get<std::vector<float>>("InputPolarity")),
       fMuonThresholds(p.get<std::vector<float>>("MuonThresholds")),
@@ -1101,18 +1107,18 @@ void sbnd::MichelTaggerProducer::findPeakPairs(
 void sbnd::MichelTaggerProducer::findCRTTimes(const art::Event &e)
 {
   crtHits.clear();
-  auto febData = e.getValidHandle<std::vector<sbnd::crt::FEBData>>(fCRTLabel);
+  auto febData = e.getValidHandle<std::vector<sbnd::crt::CRTStripHit>>(fCRTStripHitLabel);
   std::vector<std::pair<float, unsigned>> valid_hits;
 
   for (const auto &febdata : *febData)
   {
-    auto mac5 = febdata.Mac5();
-    auto plane = sbnd::crt::CRTCommonUtils::GetTaggerEnum(fCRTGeo.GetTaggerName(fCRTGeo.ChannelToStripName(mac5 * 32)));
-    auto ts1 = ((float)febdata.Ts1() - fCRTOffset) / fCRTClockSpeed;
-    auto flag = febdata.Flags();
-    if (flag != 3 || plane > 6)
+    // auto mac5 = febdata.Mac5();
+    auto plane = sbnd::crt::CRTCommonUtils::GetTaggerEnum(fCRTGeo.GetTaggerName(fCRTGeo.ChannelToStripName(febdata.Channel())));
+    auto ts0 = (float)febdata.Ts0(); //- fCRTOffset) / fCRTClockSpeed;
+    // auto flag = febdata.Flags();
+    if (plane > 6)
       continue;
-    valid_hits.push_back(std::make_pair((float)ts1, plane));
+    valid_hits.push_back(std::make_pair((float)ts0, plane));
   }
   std::sort(valid_hits.begin(), valid_hits.end(),
             [](std::pair<float, unsigned> hit1, std::pair<float, unsigned> hit2)
@@ -1211,7 +1217,15 @@ std::vector<std::pair<float, float>> sbnd::MichelTaggerProducer::findOpMuons(
 
   muonThreshold = fFindMuonThreshold;
   michelThreshold = fFindMichelPeak;
-  auto waveforms = e.getValidHandle<std::vector<raw::OpDetWaveform>>(fFinderInputLabel);
+  art::Handle<std::vector<raw::OpDetWaveform>> waveforms;
+  if (fFinderInstanceName == "")
+  {
+    e.getByLabel(fFinderInputLabel, waveforms);
+  }
+  else
+  {
+    e.getByLabel(fFinderInputLabel, fFinderInstanceName, waveforms);
+  }
   float startTime = std::numeric_limits<float>::max();
   float endTime = -std::numeric_limits<float>::max();
   float readoutDelay = 0.;

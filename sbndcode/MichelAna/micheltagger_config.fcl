@@ -20,6 +20,7 @@ MichelTaggerProducer:
   # Find candidate muon and michel flashes (summed waveform)
   OpFlashLabels: []
   FinderInputLabel: "opdecopmt"
+  FinderInstanceName: ""
   FinderOpTypes: ["pmt_coated", "pmt_uncoated"]
   PMTTriggerLabel: "pmttriggerproducer"
   MinPMTMultiplicity: 10
@@ -28,14 +29,16 @@ MichelTaggerProducer:
   FindMichelPeak: 100.      # Min Michel peak height as fraction of muon peak
   MuonMichelMaxRatio: 0.01
   CRTLabel: "crtsim"
+  CRTStripHitLabel: "crtstrips"
   CRTGeoParams: @local::crtgeoalg_sbnd
   CRTOffset: 1700000.
   CRTClockSpeed: 1.
   CRTCoincidence: 300.
   RunningSumSampleWidth: 10
 
-  ProduceWaveforms: true
+  ProduceWaveforms: false
   InputLabel: "opdecopmt" # opdecoxarapuca
+  InstanceName: ""
   InputOpTypes: ["pmt_coated", "pmt_uncoated", "xarapuca_vuv", "xarapuca_vis"]
   InputPolarity: [1., 1., 1., 1.]
   MuonThresholds: [125., 75., 50., 50.]
@@ -64,5 +67,17 @@ MichelTaggerProducer:
   BinWaveforms: false
   Verbose: false
 }
+
+MichelTaggerProducerDecoData: @local::MichelTaggerProducer
+MichelTaggerProducerDecoData.CRTLabel: "crtdecoder"
+MichelTaggerProducerDecoData.UseMC: false
+MichelTaggerProducerDecoData.CRTOffset: 367000
+
+MichelTaggerProducerRawData: @local::MichelTaggerProducerDecoData
+MichelTaggerProducerRawData.FinderInputLabel: "pmtdecoder"
+MichelTaggerProducerRawData.FinderInstanceName: "PMTChannels"
+MichelTaggerProducerRawData.InputLabel: "pmtdecoder"
+MichelTaggerProducerRawData.InstanceName: "PMTChannels"
+MichelTaggerProducerRawData.CRTOffset: 367000
 
 END_PROLOG

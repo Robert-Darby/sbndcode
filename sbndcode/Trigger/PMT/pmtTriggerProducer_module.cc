@@ -143,6 +143,7 @@ private:
   double fWindowStart;                                                     // start time (in us) of trigger window (set in fcl, 0 for beam spill)
   double fWindowEnd;                                                       // end time (in us) of trigger window (set in fcl, 1.6 for beam spill)
   std::string fInputModuleName;                                            // opdet waveform module name (set in fcl)
+  std::string fInstanceName;                                              // opdet waveform instance name (set in fcl)
   std::vector<std::string> fOpDetsToPlot = {"pmt_coated", "pmt_uncoated"}; // types of optical detetcors (e.g. "pmt_coated", "xarapuca_vuv", etc.), should only be pmt_coated and pmt_uncoated (set in fcl)
   bool fSaveHists;                                                         // save raw, binary, etc. histograms (set in fcl)
   std::vector<int> fEvHists = {1, 2, 3};                                   // if fSaveHists=true, which event hists to save? (set in fcl)
@@ -168,6 +169,7 @@ void pmtTriggerProducer::reconfigure(fhicl::ParameterSet const &p)
 {
   // Initialize member data here
   fInputModuleName = p.get<std::string>("InputModule", "opdaq");
+  fInstanceName= p.get<std::string>("InstanceName");
   fOpDetsToPlot = p.get<std::vector<std::string>>("OpDetsToPlot");
   fIndividualThresholds = p.get<bool>("IndividualThresholds", false);
   fThreshold = p.get<std::vector<double>>("Threshold");
@@ -200,7 +202,14 @@ void pmtTriggerProducer::produce(art::Event &e)
   event = e.id().event();
 
   art::Handle<std::vector<raw::OpDetWaveform>> waveHandle;
-  e.getByLabel(fInputModuleName, waveHandle);
+  if(fInstanceName != "")
+  {
+    e.getByLabel(fInputModuleName, fInstanceName, waveHandle);
+  }
+  else
+  {
+    e.getByLabel(fInputModuleName, waveHandle);
+  }
 
   if (!waveHandle.isValid())
   {
